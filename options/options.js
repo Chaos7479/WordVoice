@@ -6,6 +6,8 @@ import {
   PROVIDER_LIST,
   TRANSLATION_PROVIDER_LIST,
   AI_PROVIDER_LIST,
+  importLocalCredentials,
+  importCredentialData,
 } from '../lib/settings.js';
 import { send, escapeHtml as esc, showStatus } from '../lib/ui.js';
 import db from '../lib/db.js';
@@ -149,6 +151,7 @@ function collect() {
 }
 async function load() {
   try {
+    await importLocalCredentials();
     const settings = await getSettings();
     loadedSettings = settings;
     for (const [id, list] of [
@@ -179,7 +182,9 @@ async function load() {
     renderBrowserVoices(settings.browserVoice);
     await refreshVoices(settings.browserVoice);
     $('saveBtn').disabled = false;
-    $('settingsForm').oninput = () => {
+    $('importCredentials').disabled = false;
+    $('settingsForm').oninput = (event) => {
+      if (event.target === $('credentialFile')) return;
       dirty = true;
       $('saveStatus').dataset.dirty = 'true';
       $('saveStatus').textContent = '有未保存的更改';
@@ -212,6 +217,41 @@ $('settingsForm').onsubmit = async (event) => {
   } catch (error) {
     showStatus(error.message, true);
   } finally {
+    $('saveBtn').disabled = false;
+  }
+};
+$('importCredentials').onclick = () => $('credentialFile').click();
+$('credentialFile').onchange = async () => {
+  const file = $('credentialFile').files[0];
+  if (!file || !loadedSettings) return;
+  const status = $('credentialImportStatus');
+  $('importCredentials').disabled = true;
+  $('saveBtn').disabled = true;
+  try {
+    if (file.size > 128 * 1024) throw new Error('配置文件超过 128 KB，请选择 settings.local.json');
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      // Parser errors may include fragments of a secret. Show a fixed message.
+      throw new Error('配置文件格式无效，请选择有效的 JSON 文件');
+    }
+    const result = await importCredentialData(data, collect());
+    loadedSettings = result.settings;
+    renderFields(loadedSettings);
+    dirty = false;
+    $('saveStatus').dataset.dirty = 'false';
+    $('saveStatus').textContent = '已保存';
+    status.dataset.error = 'false';
+    status.textContent = `已导入并保存：${result.imported.map((id) => fields[id].title.split(' · ')[0]).join('、')}。可返回浮层选择发音。`;
+    await refreshDiagnostics();
+  } catch (error) {
+    status.dataset.error = 'true';
+    status.textContent = error.message;
+  } finally {
+    status.hidden = false;
+    $('credentialFile').value = '';
+    $('importCredentials').disabled = false;
     $('saveBtn').disabled = false;
   }
 };

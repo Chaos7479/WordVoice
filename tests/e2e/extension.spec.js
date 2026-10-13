@@ -1,9 +1,9 @@
 import { test, expect, chromium } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, cp } from 'node:fs/promises';
 import path from 'node:path';
-let context, worker, extensionId, server, baseURL, profile, harness;
+let context, worker, extensionId, server, baseURL, profile, extensionRoot, harness;
 const errors = [];
 const fixture = `<!doctype html><html><head><meta charset="utf-8"><title>WordVoice test page</title></head><body>
 <h1>Reading practice</h1><p id="first">Hello</p><p id="second">World</p><p id="sentence">I love New York. It is a large city.</p>
@@ -170,11 +170,25 @@ test.beforeAll(async () => {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseURL = `http://127.0.0.1:${server.address().port}`;
   profile = await mkdtemp(path.join(process.cwd(), '.test-profile-'));
+  // Match the public package: never import a developer's private credentials in tests.
+  extensionRoot = await mkdtemp(path.join(process.cwd(), '.test-profile-extension-'));
+  for (const entry of [
+    'manifest.json',
+    'assets',
+    'background',
+    'content',
+    'lib',
+    'offscreen',
+    'options',
+    'popup',
+    'sidepanel',
+  ])
+    await cp(entry, path.join(extensionRoot, entry), { recursive: true });
   context = await chromium.launchPersistentContext(profile, {
     channel: 'chromium',
     headless: true,
     viewport: { width: 1100, height: 800 },
-    args: [`--disable-extensions-except=${process.cwd()}`, `--load-extension=${process.cwd()}`],
+    args: [`--disable-extensions-except=${extensionRoot}`, `--load-extension=${extensionRoot}`],
   });
   worker = context.serviceWorkers()[0] || (await context.waitForEvent('serviceworker'));
   extensionId = new URL(worker.url()).host;
@@ -212,6 +226,7 @@ test.afterAll(async () => {
   await context?.close();
   await new Promise((resolve) => server?.close(resolve));
   if (profile) await rm(profile, { recursive: true, force: true });
+  if (extensionRoot) await rm(extensionRoot, { recursive: true, force: true });
 });
 
 test('S starts speech before slow lookups, preserves page DOM and saves once per keypress', async () => {
@@ -877,6 +892,7 @@ test('empty views, clear search, keyboard review and modal focus work', async ()
   await panel.keyboard.press('Escape');
   await expect(panel.locator('.word-open')).toBeFocused();
   await panel.locator('#reviewModeBtn').click();
+  await expect(panel.locator('#cardFlipBtn')).toBeFocused();
   await panel.keyboard.press('Space');
   await expect(panel.locator('#flashcard')).toHaveClass(/flipped/);
   await panel.keyboard.press('1');
@@ -1014,6 +1030,60 @@ test('floating configuration opens services and refreshes availability after sav
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
     .analyze();
   expect(audit.violations).toEqual([]);
+});
+
+test('credential file import unlocks the open speech menu and keeps preferences and vocabulary', async () => {
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('option[value="dashscope"]')).toBeDisabled();
+  await expect(popup.locator('option[value="minimax"]')).toBeDisabled();
+  const options = await extensionPage('options');
+  await expect(options.locator('#importCredentials')).toBeEnabled();
+  await options.locator('#speechRate').selectOption('0.85');
+  await options.locator('#credentialFile').setInputFiles({
+    name: 'settings.local.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        schema: 1,
+        revision: 'test-file',
+        providers: {
+          dashscope: { apiKey: 'private-dashscope-test-key' },
+          minimax: { apiKey: 'private-minimax-test-key' },
+        },
+      }),
+    ),
+  });
+  await expect(options.locator('#credentialImportStatus')).toContainText(
+    '已导入并保存：阿里云百炼、MiniMax',
+  );
+  await expect(options.locator('#saveStatus')).toHaveText('已保存');
+  await expect(popup.locator('option[value="dashscope"]')).toBeEnabled();
+  await expect(popup.locator('option[value="minimax"]')).toBeEnabled();
+  await expect(popup.locator('option[value="doubao"]')).toBeDisabled();
+  expect(await popup.textContent()).not.toContain('private-');
+  expect((await savedWords())[0].frequency).toBe(1);
+  await options.reload();
+  await expect(options.locator('#speechRate')).toHaveValue('0.85');
+  await expect(options.locator('#minimax-apiKey')).toHaveValue('private-minimax-test-key');
+  await options.locator('#credentialFile').setInputFiles({
+    name: 'bad.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"secret":"private-parse-error-key"'),
+  });
+  await expect(options.locator('#credentialImportStatus')).toContainText('配置文件格式无效');
+  expect(await options.locator('#credentialImportStatus').textContent()).not.toContain(
+    'private-parse',
+  );
+  await expect(options.locator('#minimax-apiKey')).toHaveValue('private-minimax-test-key');
+  await options.locator('#credentialFile').setInputFiles({
+    name: 'large.json',
+    mimeType: 'application/json',
+    buffer: Buffer.alloc(128 * 1024 + 1),
+  });
+  await expect(options.locator('#credentialImportStatus')).toContainText('128 KB');
 });
 
 test('S wakes a stopped service worker and retains data and settings', async () => {

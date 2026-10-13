@@ -53,6 +53,8 @@
 
 设置中的「试听」「测试翻译」「测试 AI 例句」使用当前表单值。**保存设置**后，网页使用新配置。浮层的「发音」菜单可以直接切换已配置的服务；切换会重读当前文本，并保存为后续朗读的默认服务。重复试听保留查询次数和上下文。未配置的服务会标注状态，可通过旁边的「配置」打开设置页；保存后浮层立即更新。
 
+已有 `settings.local.json` 时，在「云端服务」点击 **导入配置** 并选择该文件。扩展会合并服务凭据，并保存当前表单设置。导入成功后，已打开的浮层立即启用对应服务。文件格式错误时保留原设置。
+
 云端发音路径设有 5 秒截止时间。服务失败或超时后会尝试浏览器语音。测试按钮直接报告所选服务的结果，便于检查配置。
 
 ## 界面与键盘操作
@@ -104,9 +106,9 @@ npm run package
 - 多数浏览器测试使用受控网络响应和模拟系统语音事件，保证离线复现。音频播放测试使用真实 Offscreen Audio 元素。macOS 唤醒测试另用真实系统语音。
 - `npm run package`：在 `dist/` 生成可解压加载的 ZIP。
 
-本地开发可运行 `node scripts/configure-local.mjs /绝对路径/语音服务.env`，从已有环境文件生成 `settings.local.json`。支持 `DASHSCOPE_API_KEY`、`MINIMAX_API_KEY_PROD`（或 `MINIMAX_API_KEY` / `MINIMAX_API_KEY_TEST`）、`DOUBAO_TTS_APP_ID` 与 `DOUBAO_TTS_ACCESS_TOKEN`。重新加载**此源码目录**中的扩展后自动导入；随后清空某个 Key 会保留该选择。需要更新 Key 时重新生成本地配置。
+本地开发可运行 `node scripts/configure-local.mjs /绝对路径/语音服务.env`，从已有环境文件生成 `settings.local.json`。支持 `DASHSCOPE_API_KEY`、`MINIMAX_API_KEY_PROD`（或 `MINIMAX_API_KEY` / `MINIMAX_API_KEY_TEST`）、`DOUBAO_TTS_APP_ID` 与 `DOUBAO_TTS_ACCESS_TOKEN`。重新加载**此源码目录**中的扩展或打开设置页后自动导入；随后清空某个 Key 会保留该选择。需要更新 Key 时重新生成本地配置，或在设置页主动导入文件。
 
-本地配置文件权限为 600，已排除在 Git 和发布 ZIP 之外。安装公开 ZIP 时，在设置页填写 Key。凭据只向对应服务商发送；浮层接收服务名称、模型与配置状态。
+本地配置文件权限为 600，已排除在 Git 和发布 ZIP 之外。安装公开 ZIP 时，在设置页导入本机配置文件或填写 Key。凭据只向对应服务商发送；浮层接收服务名称、模型与配置状态。
 
 完整审计与验证记录见 [docs/AUDIT.md](docs/AUDIT.md)。
 

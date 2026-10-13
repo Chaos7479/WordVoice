@@ -163,6 +163,23 @@ html {
   padding: 0 16px;
   margin-top: 10px;
 }
+.credential-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 12px;
+}
+.credential-import .hint {
+  flex: 1 1 200px;
+  font-size: 11px;
+}
+#credentialImportStatus {
+  margin: 12px 0;
+}
+#credentialImportStatus[data-error='true'] {
+  color: var(--danger);
+}
 .credential-section summary {
   cursor: pointer;
   padding: 16px 0;

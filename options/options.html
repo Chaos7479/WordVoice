@@ -106,6 +106,20 @@
           <section class="section" id="services" aria-labelledby="servicesTitle">
             <h2 id="servicesTitle">云端服务</h2>
             <p class="section-desc">密钥只保存在当前浏览器中。保存后可在选词浮层切换发音服务。</p>
+            <div class="credential-import">
+              <button type="button" id="importCredentials" disabled>导入配置</button>
+              <span class="hint" id="credentialImportHint"
+                >选择 settings.local.json，导入并保存当前设置。</span
+              >
+              <input
+                type="file"
+                id="credentialFile"
+                accept=".json,application/json"
+                aria-label="本机服务配置"
+                hidden
+              />
+            </div>
+            <p id="credentialImportStatus" class="hint" role="status" hidden></p>
             <div id="providerFields"></div>
           </section>
         </form>
