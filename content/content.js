@@ -153,6 +153,10 @@
     const entry = current;
     if (!entry || entry.dismissed || entry.meaningPending || entry.refining) return;
     const note = shadow.querySelector('.context-note').value.trim();
+    const editorWasOpen = entry.noteOpen;
+    setNoteOpen(false);
+    shadow.querySelector('.context-note').value = '';
+    if (editorWasOpen) shadow.querySelector('.explanation').focus({ preventScroll: true });
     entry.lastDirection = direction;
     entry.refining = true;
     entry.explanationError = '';
@@ -184,10 +188,19 @@
     } catch (error) {
       if (current !== entry || entry.dismissed) return;
       entry.explanationError = error.message || '连接已中断，请刷新网页后重试';
+      if (note) {
+        shadow.querySelector('.context-note').value = note;
+        setNoteOpen(true);
+      }
     } finally {
       entry.refining = false;
       if (current === entry && !entry.dismissed) render();
     }
+  }
+  function setNoteOpen(open) {
+    current.noteOpen = open;
+    shadow.querySelector('.context-form').hidden = !open;
+    shadow.querySelector('.add-context').setAttribute('aria-expanded', String(open));
   }
   function renderSpeechOptions(options) {
     const select = shadow?.querySelector('.speech-provider');
@@ -279,7 +292,7 @@
       <div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p></div>
       <section class="explanation-block" aria-label="AI 解释">
         <div class="explanation-heading"><span>AI 解释</span><span class="model" hidden></span></div>
-        <p class="explanation" role="status" aria-live="polite" hidden></p>
+        <p class="explanation" role="status" aria-live="polite" tabindex="-1" hidden></p>
         <div class="meaning-wait"><span class="waiting-label">正在翻译并解释…</span><div class="progress" role="progressbar" aria-label="正在生成翻译与解释"></div></div>
         <div class="explanation-actions" hidden>
           <button class="deeper" title="补充原理和细节">＋ 太浅了</button><button class="simpler" title="用常用词和例子解释">－ 太深了</button>
@@ -314,9 +327,7 @@
     shadow.querySelector('.retry-explanation').onclick = () =>
       refine(current.lastDirection || 'initial');
     shadow.querySelector('.add-context').onclick = () => {
-      current.noteOpen = !current.noteOpen;
-      shadow.querySelector('.context-form').hidden = !current.noteOpen;
-      shadow.querySelector('.add-context').setAttribute('aria-expanded', String(current.noteOpen));
+      setNoteOpen(!current.noteOpen);
       if (current.noteOpen) shadow.querySelector('.context-note').focus();
       position();
     };

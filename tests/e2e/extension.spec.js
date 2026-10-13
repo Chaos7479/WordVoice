@@ -300,6 +300,9 @@ test('selection returns translation and explanation together, with progress and 
   await page.keyboard.type('s');
   expect((await savedWords())[0].frequency).toBe(1);
   await popup.locator('.deeper').click();
+  await expect(popup.locator('.context-form')).toBeHidden();
+  await expect(popup.locator('.context-note')).toHaveValue('');
+  await expect(popup.locator('.add-context')).toHaveAttribute('aria-expanded', 'false');
   await expect(popup.locator('.simpler')).toBeDisabled();
   await expect(popup.locator('.explanation')).toHaveText(first);
   await expect(popup.locator('.explanation')).toContainText('寒暄语');
@@ -309,13 +312,29 @@ test('selection returns translation and explanation together, with progress and 
   expect(requests[1].input.previousExplanations.at(-1).explanation).toBe(first);
   await popup.locator('.simpler').click();
   await expect(popup.locator('.explanation')).toContainText('就像见到朋友');
+  expect(await worker.evaluate(() => __meaningRequests.at(-1).input.note)).toBe('');
+  expect(
+    await worker.evaluate(() => __meaningRequests.at(-1).input.previousExplanations.at(-1).note),
+  ).toBe('用生活中的例子解释s');
+  await popup.locator('.add-context').click();
   await popup.locator('.context-note').fill('用开门作比喻');
   await popup.locator('.context-note').press('Control+Enter');
+  await expect(popup.locator('.context-form')).toBeHidden();
+  await expect(popup.locator('.explanation')).toBeFocused();
   await expect(popup.locator('.explanation')).toContainText('打开一扇门');
   expect([...(await popup.locator('.explanation').innerText())].length).toBeLessThanOrEqual(140);
   expect(
     await worker.evaluate(() => __meaningRequests.at(-1).input.previousExplanations.length),
   ).toBe(3);
+  await popup.locator('.add-context').click();
+  await expect(popup.locator('.context-note')).toHaveValue('');
+  await popup.locator('.context-note').fill('再举一个例子');
+  await popup.locator('.submit-context').click();
+  await expect(popup.locator('.context-form')).toBeHidden();
+  await expect(popup.getByRole('progressbar')).toBeVisible();
+  await expect(popup.getByRole('progressbar')).toBeHidden();
+  expect(await worker.evaluate(() => __meaningRequests.at(-1).input.note)).toBe('再举一个例子');
+  await expect(popup.locator('.context-form')).toBeHidden();
   expect((await savedWords())[0].frequency).toBe(1);
   expect(await worker.evaluate(() => __calls.length)).toBe(1);
   expect(await popup.textContent()).not.toContain('explanation-test-key');
@@ -337,6 +356,7 @@ test('failed refinements preserve the previous explanation and note, then retry 
   await popup.locator('.simpler').click();
   await expect(popup.locator('.explanation-error')).toContainText('暂不可用');
   await expect(popup.locator('.explanation')).toHaveText(previous);
+  await expect(popup.locator('.context-form')).toBeVisible();
   await expect(popup.locator('.context-note')).toHaveValue('给一个例子');
   await expect(popup.getByRole('progressbar')).toBeHidden();
   await worker.evaluate(() => {
@@ -345,6 +365,8 @@ test('failed refinements preserve the previous explanation and note, then retry 
   await popup.locator('.retry-explanation').click();
   await expect(popup.locator('.explanation')).toContainText('就像见到朋友');
   await expect(popup.locator('.explanation-error')).toBeHidden();
+  await expect(popup.locator('.context-form')).toBeHidden();
+  await expect(popup.locator('.context-note')).toHaveValue('');
   expect(await worker.evaluate(() => __meaningRequests.at(-1).input.direction)).toBe('simpler');
 });
 
