@@ -2,7 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory } from 'fake-indexeddb';
 import { WordVoiceDB } from '../lib/db.js';
-import { getTextType, normalizeText, safePageUrl, weekStart } from '../lib/text.js';
+import { getTextType, normalizeText, safePageUrl, safeContextUrl, weekStart } from '../lib/text.js';
 import { escapeHtml } from '../lib/ui.js';
 import { normalizeSettings, getSettings, saveSettings } from '../lib/settings.js';
 import { request } from '../lib/network.js';
@@ -56,6 +56,27 @@ test('contexts are bounded and unsafe URLs are removed', async () => {
   const detail = await db.getWordWithContexts(word.id);
   assert.equal(detail.contexts.length, 20);
   assert(detail.contexts.every((c) => !c.pageUrl));
+});
+test('local HTML sources survive backup while audio and unsafe URLs stay restricted', async () => {
+  const url = 'file:///Users/example/Reading%20notes.html#database';
+  assert.equal(safeContextUrl(url), url);
+  assert.equal(safePageUrl(url), '');
+  for (const unsafe of [
+    'javascript:alert(1)',
+    'data:text/html,hello',
+    'file://server/share/doc.html',
+  ])
+    assert.equal(safeContextUrl(unsafe), '');
+  const word = await db.saveWord(
+    { word: 'database', audioUrl: url },
+    { pageUrl: url, pageTitle: 'Reading notes', sentence: 'A database stores records.' },
+  );
+  const backup = await db.exportData();
+  await db.deleteWord(word.id);
+  await db.importData(backup);
+  const restored = await db.exportData();
+  assert.equal(restored.contexts[0].pageUrl, url);
+  assert.equal(restored.words[0].audioUrl, '');
 });
 test('enrichment does not increase frequency or resurrect a deleted word', async () => {
   const w = await db.saveWord({ word: 'apple' });

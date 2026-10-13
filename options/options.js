@@ -25,7 +25,7 @@ const fields = {
   },
   qwen: {
     title: '通义千问 · 翻译和例句',
-    hint: '翻译和 AI 例句共用此配置。',
+    hint: '翻译和 AI 例句共用此配置。Key 留空时使用百炼语音的 Key。',
     fields: [
       ['apiKey', 'API Key', 'password'],
       ['textModel', '文本模型名称', 'text'],
@@ -342,6 +342,25 @@ $('openShortcuts').onclick = (event) => {
   event.preventDefault();
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
 };
+async function refreshFileAccess() {
+  try {
+    const allowed = await chrome.extension.isAllowedFileSchemeAccess();
+    $('fileAccessStatus').textContent = allowed
+      ? '已允许访问本地网页。刷新 HTML 页面后，选中文字按 S 朗读。'
+      : '在扩展详情中开启「允许访问文件网址」，再刷新本地 HTML 页面。授权后可在本地网页选词朗读。';
+  } catch {
+    $('fileAccessStatus').textContent = '请在扩展详情中查看「允许访问文件网址」。';
+  }
+}
+$('openFileAccess').onclick = () =>
+  chrome.tabs
+    .create({ url: `chrome://extensions/?id=${chrome.runtime.id}` })
+    .catch((error) => showStatus(error.message, true));
+window.addEventListener('focus', refreshFileAccess);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshFileAccess();
+});
+refreshFileAccess();
 const navLinks = [...document.querySelectorAll('.settings-sidebar nav a')];
 const observer = new IntersectionObserver(
   (entries) => {

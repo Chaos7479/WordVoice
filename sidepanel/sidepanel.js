@@ -10,7 +10,7 @@ import {
   emptyState,
   wireSearch,
 } from '../lib/ui.js';
-import { safePageUrl } from '../lib/text.js';
+import { safeContextUrl } from '../lib/text.js';
 import { renderMasteryChart, renderDailyChart } from './charts.js';
 const $ = (id) => document.getElementById(id);
 let filter = 'all',
@@ -151,8 +151,8 @@ async function showWordDetail(id) {
     $('detailContexts').innerHTML = word.contexts?.length
       ? word.contexts
           .map((c) => {
-            const url = safePageUrl(c.pageUrl);
-            return `<div class="context-item">${c.sentence ? `<div class="context-sentence-row"><div class="context-sentence">${esc(c.sentence)}</div>${speakButton(c.sentence)}</div>` : ''}<div class="context-source">${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(c.pageTitle || new URL(url).hostname)}</a>` : '未记录来源'} · ${formatDate(c.createdAt)}</div></div>`;
+            const url = safeContextUrl(c.pageUrl);
+            return `<div class="context-item">${c.sentence ? `<div class="context-sentence-row"><div class="context-sentence">${esc(c.sentence)}</div>${speakButton(c.sentence)}</div>` : ''}<div class="context-source">${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(c.pageTitle || new URL(url).hostname || '本地文件')}</a>` : '未记录来源'} · ${formatDate(c.createdAt)}</div></div>`;
           })
           .join('')
       : '<div class="word-list-empty">暂无上下文</div>';

@@ -1,7 +1,7 @@
 import db from '../lib/db.js';
 import tts, { getVoices } from '../lib/tts.js';
 import { fetchWordData } from '../lib/lookup.js';
-import { translateWord, translateDirect } from '../lib/translate.js';
+import { translateWithSettings, translateDirect } from '../lib/translate.js';
 import {
   getSettings,
   saveSettings,
@@ -11,10 +11,13 @@ import {
   isSpeechConfigured,
   chooseSpeechProvider,
   importLocalCredentials,
+  textServiceConfig,
 } from '../lib/settings.js';
 import { generateSentences } from '../lib/ai-sentences.js';
 import { complete } from '../lib/llm.js';
-import { normalizeText, getTextType, textField, safePageUrl } from '../lib/text.js';
+import { normalizeText, getTextType, textField, safeContextUrl } from '../lib/text.js';
+
+const pageMatches = chrome.runtime.getManifest().content_scripts.flatMap(({ matches }) => matches);
 
 function notifyViews() {
   chrome.runtime.sendMessage({ action: 'dataChanged' }).catch(() => {});
@@ -65,7 +68,7 @@ async function handlePronounce(message, sender) {
       { word },
       {
         sentence: textField(message.sentence),
-        pageUrl: safePageUrl(sender.url || message.pageUrl),
+        pageUrl: safeContextUrl(sender.url || message.pageUrl),
         pageTitle: textField(message.pageTitle, 500),
       },
     )
@@ -84,28 +87,29 @@ async function handlePronounce(message, sender) {
     });
   const settings = await settingsPromise;
   await sendUpdate(sender, requestId, { speechOptions: speechOptions(settings) });
-  const dictionary =
+  const dictionary = (
     settings.sourceLanguage === 'en' && getTextType(word) === 'word'
       ? fetchWordData(word, settings.pronunciation).catch(() => ({ definitions: [] }))
-      : Promise.resolve({ definitions: [] });
-  const translation = settings.showTranslation
-    ? translateWord(
-        word,
-        settings.translationProvider,
-        settings.providers[settings.translationProvider] || {},
-        4000,
-        settings.sourceLanguage,
-        settings.targetLanguage,
-      ).catch(() => '')
-    : Promise.resolve('');
-  const [wordData, translated] = await Promise.all([dictionary, translation]);
-  await sendUpdate(sender, requestId, {
-    phonetic: wordData.phonetic || '',
-    translation: translated,
-    definition: wordData.definitions?.[0]?.meaning || '',
-    lookupDone: true,
-    lookupWarning: settings.showTranslation && !translated ? '翻译暂不可用，可稍后重试' : '',
+      : Promise.resolve({ definitions: [] })
+  ).then(async (data) => {
+    await sendUpdate(sender, requestId, {
+      phonetic: data.phonetic || '',
+      definition: data.definitions?.[0]?.meaning || '',
+    });
+    return data;
   });
+  const translation = (
+    settings.showTranslation
+      ? translateWithSettings(word, settings)
+          .then((text) => ({ text, warning: '' }))
+          .catch((error) => ({ text: '', warning: error.message }))
+      : Promise.resolve({ text: '', warning: '' })
+  ).then(async ({ text, warning }) => {
+    await sendUpdate(sender, requestId, { translation: text, lookupWarning: warning });
+    return text;
+  });
+  const [wordData, translated] = await Promise.all([dictionary, translation]);
+  await sendUpdate(sender, requestId, { lookupDone: true });
   const saved = await savePromise;
   if (saved) {
     await db.enrichWord(
@@ -174,14 +178,7 @@ const handlers = {
     const settings = await getSettings();
     if (!settings.showTranslation) return { translation: '' };
     const word = normalizeText(message.word);
-    const translation = await translateWord(
-      word,
-      settings.translationProvider,
-      settings.providers[settings.translationProvider] || {},
-      4000,
-      settings.sourceLanguage,
-      settings.targetLanguage,
-    );
+    const translation = await translateWithSettings(word, settings);
     if (message.wordId) {
       const existing = await db.getWordWithContexts(validId(message.wordId));
       if (existing?.word === word.toLowerCase()) {
@@ -199,7 +196,7 @@ const handlers = {
     const sentences = await generateSentences(
       message.word,
       settings.aiProvider,
-      settings.providers[settings.aiProvider],
+      textServiceConfig(settings, settings.aiProvider),
     );
     return { sentences };
   },
@@ -223,6 +220,7 @@ const handlers = {
   testApi: async (message) => {
     const { type, provider, config = {} } = message;
     const settings = normalizeSettings({ ...(await getSettings()), ...message.preferences });
+    settings.providers[provider] = config;
     const start = Date.now();
     try {
       let result;
@@ -241,7 +239,7 @@ const handlers = {
         result = await translateDirect(
           'Hello. Welcome to WordVoice.',
           provider,
-          config,
+          textServiceConfig(settings, provider),
           8000,
           settings.sourceLanguage,
           settings.targetLanguage,
@@ -249,7 +247,7 @@ const handlers = {
       } else if (type === 'ai') {
         result = await complete(
           provider,
-          config,
+          textServiceConfig(settings, provider),
           'Write one short English sentence using the word provided. Output only the sentence.',
           'hello',
         );
@@ -286,7 +284,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.settings) return;
   const options = speechOptions(normalizeSettings(changes.settings.newValue));
   chrome.tabs
-    .query({ url: ['http://*/*', 'https://*/*'] })
+    .query({ url: pageMatches })
     .then((tabs) =>
       Promise.allSettled(
         tabs
@@ -347,7 +345,7 @@ chrome.runtime.onInstalled.addListener(() => {
     await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
     await importLocalCredentials();
     await db.open();
-    const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+    const tabs = await chrome.tabs.query({ url: pageMatches });
     await Promise.allSettled(tabs.filter((t) => t.id).map((t) => inject(t.id)));
   })().catch((error) => console.error('WordVoice initialization:', error.message));
 });

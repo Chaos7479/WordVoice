@@ -1,8 +1,9 @@
 import { test, expect, chromium } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { createServer } from 'node:http';
-import { mkdtemp, rm, cp } from 'node:fs/promises';
+import { mkdtemp, rm, cp, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 let context, worker, extensionId, server, baseURL, profile, extensionRoot, harness;
 const errors = [];
 const fixture = `<!doctype html><html><head><meta charset="utf-8"><title>WordVoice test page</title></head><body>
@@ -227,6 +228,82 @@ test.afterAll(async () => {
   await new Promise((resolve) => server?.close(resolve));
   if (profile) await rm(profile, { recursive: true, force: true });
   if (extensionRoot) await rm(extensionRoot, { recursive: true, force: true });
+});
+
+test('local HTML supports S, saving its source, and live speech settings', async () => {
+  expect(await harness.evaluate(() => chrome.extension.isAllowedFileSchemeAccess())).toBe(true);
+  const file = path.join(profile, 'local reading.html');
+  await writeFile(file, fixture.replace('<iframe src="/frame"></iframe>', ''));
+  const page = await context.newPage();
+  page.on('pageerror', (error) => errors.push(error.message));
+  const url = pathToFileURL(file).href;
+  await page.goto(url);
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('.translation')).toHaveText('你好。欢迎。');
+  await expect(popup.locator('.status')).toContainText('Samantha');
+  await expect.poll(async () => (await savedWords()).length).toBe(1);
+  const data = await harness.evaluate(async () =>
+    (await import(chrome.runtime.getURL('lib/db.js'))).default.exportData(),
+  );
+  expect(data.contexts[0].pageUrl).toBe(url);
+  expect(data.contexts[0].pageTitle).toBe('WordVoice test page');
+  await setSettings({ providers: { minimax: { apiKey: 'file-test-key' } } });
+  await expect(popup.locator('option[value="minimax"]')).toBeEnabled();
+  expect(await popup.textContent()).not.toContain('file-test-key');
+  await page.screenshot({ path: 'test-results/design-local-file.png' });
+});
+
+test('blocked Google translation falls back to the speech DashScope key before dictionary returns', async () => {
+  await setSettings({ providers: { dashscope: { apiKey: 'shared-dashscope-test-key' } } });
+  await worker.evaluate(() => {
+    const original = fetch;
+    globalThis.__qwenCalls = 0;
+    globalThis.fetch = async (input, options = {}) => {
+      const url = String(input);
+      if (url.includes('google')) throw new TypeError('Failed to fetch');
+      if (url.includes('dictionaryapi.dev'))
+        await new Promise((resolve) => {
+          globalThis.__releaseDictionary = resolve;
+        });
+      if (url.includes('dashscope.aliyuncs.com')) {
+        globalThis.__qwenCalls++;
+        if (options.headers.Authorization !== 'Bearer shared-dashscope-test-key')
+          return new Response('', { status: 401 });
+        return new Response(JSON.stringify({ choices: [{ message: { content: '你好' } }] }));
+      }
+      return original(input, options);
+    };
+  });
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('.translation')).toHaveText('你好');
+  await expect(popup.locator('.status')).toContainText('Samantha');
+  await expect(popup.locator('.error')).toBeHidden();
+  expect(await worker.evaluate(() => typeof __releaseDictionary)).toBe('function');
+  await worker.evaluate(() => __releaseDictionary());
+  await expect.poll(async () => (await savedWords())[0]?.translation).toBe('你好');
+  await expect.poll(async () => (await savedWords())[0]?.frequency).toBe(1);
+  expect(await popup.textContent()).not.toContain('shared-dashscope-test-key');
+  await page.screenshot({ path: 'test-results/design-translation-fallback.png' });
+});
+
+test('local file access help refreshes when Chrome access changes', async () => {
+  const options = await extensionPage('options');
+  await expect(options.locator('#fileAccessStatus')).toContainText('已允许');
+  await options.evaluate(() => {
+    chrome.extension.isAllowedFileSchemeAccess = async () => false;
+    window.dispatchEvent(new Event('focus'));
+  });
+  await expect(options.locator('#fileAccessStatus')).toContainText('允许访问文件网址');
+  await options.evaluate(() => {
+    chrome.extension.isAllowedFileSchemeAccess = async () => true;
+    window.dispatchEvent(new Event('focus'));
+  });
+  await expect(options.locator('#fileAccessStatus')).toContainText('已允许');
 });
 
 test('S starts speech before slow lookups, preserves page DOM and saves once per keypress', async () => {
