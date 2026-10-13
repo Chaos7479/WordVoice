@@ -26,6 +26,10 @@ jobs:
           name: WordVoice-extension
           path: dist/*.zip
       - uses: actions/upload-artifact@v4
+        with:
+          name: WordVoice-interface-preview
+          path: test-results/design-*.png
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-test-results

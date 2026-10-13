@@ -5,6 +5,9 @@ import {
   play,
   displayWord,
   enableKeyboardClick,
+  icon,
+  emptyState,
+  wireSearch,
 } from '../lib/ui.js';
 let generation = 0;
 let currentWindowId;
@@ -24,14 +27,21 @@ async function load() {
     ])
       document.getElementById(element).textContent = summary.stats[key];
     const list = document.getElementById('wordList');
+    document.getElementById('listHeading').textContent = query ? '搜索结果' : '最近遇见';
     list.innerHTML = result.words.length
       ? result.words
           .map(
             (word) =>
-              `<div class="word-item" data-id="${word.id}" role="button" aria-label="查看 ${esc(displayWord(word))}"><div class="word-info"><span class="word-text">${esc(displayWord(word))}</span><span class="word-phonetic">${esc(word.phonetic)}</span>${word.translation ? `<span class="word-translation">${esc(word.translation)}</span>` : ''}</div><div class="word-meta"><span class="word-frequency">${word.frequency}次</span><button class="btn-play" title="播放发音" aria-label="朗读 ${esc(displayWord(word))}">▶</button></div></div>`,
+              `<div class="word-item" data-id="${word.id}" ><button class="word-info word-open" aria-label="查看 ${esc(displayWord(word))}"><span class="word-text">${esc(displayWord(word))}</span><span class="word-phonetic">${esc(word.phonetic)}</span>${word.translation ? `<span class="word-translation">${esc(word.translation)}</span>` : ''}</button><div class="word-meta"><span class="word-frequency">${word.frequency}次</span><button class="btn-play" title="播放发音" aria-label="朗读 ${esc(displayWord(word))}">${icon('wave')}</button></div></div>`,
           )
           .join('')
-      : `<div class="word-list-empty">${query ? '没有匹配结果' : '在网页选中文本，按 S 开始学习'}</div>`;
+      : emptyState(
+          query ? '没有匹配结果' : '从一个好奇的词开始',
+          query
+            ? '试试原文、译文，或更短的关键词。'
+            : '在网页选中文字，按 S。下次打开，它就在这里。',
+          query ? 'search' : 'book',
+        );
     list.querySelectorAll('.word-item').forEach((item) => {
       const word = result.words.find((w) => w.id === Number(item.dataset.id));
       item.onclick = () => openPanel(word.id);
@@ -71,10 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('stopSpeech').onclick = () =>
     send('stopSpeech').catch((error) => showStatus(error.message, true));
   let timer;
-  document.getElementById('searchInput').oninput = () => {
+  wireSearch(document.getElementById('searchInput'), document.getElementById('clearSearch'), () => {
     clearTimeout(timer);
     timer = setTimeout(load, 150);
-  };
+  });
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'dataChanged') {
       clearTimeout(timer);

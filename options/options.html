@@ -4,123 +4,158 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WordVoice 设置</title>
-    <link rel="stylesheet" href="options.css" />
     <link rel="stylesheet" href="../lib/ui.css" />
+    <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>WordVoice 设置</h1>
-      <p class="section-desc">选中文本，按 S 朗读。默认使用浏览器语音，查询与保存同时进行。</p>
-      <form id="settingsForm">
-        <section class="section">
-          <h2>朗读与翻译</h2>
-          <div class="field">
-            <label for="ttsProvider">发音服务</label
-            ><select id="ttsProvider"></select>
-            <p class="hint">
-              浏览器语音启动快。词典原音适用于英文单词。云端发音等待最多 5 秒，随后切换浏览器语音。
-            </p>
-          </div>
-          <div class="field">
-            <label for="pronunciation">英语口音（浏览器语音与词典原音）</label
-            ><select id="pronunciation">
-              <option value="us">美式英语</option>
-              <option value="uk">英式英语</option>
-            </select>
-            <p class="hint">浏览器会优先使用对应口音的本地语音。云端口音由所选音色决定。</p>
-          </div>
-          <div class="field">
-            <label for="browserVoice">浏览器音色</label>
-            <select id="browserVoice">
-              <option value="">自动选择朗读音色</option>
-            </select>
-            <p id="browserVoiceHint" class="hint">正在读取可用音色…</p>
-            <p class="hint">
-              用于浏览器朗读和云端失败后的备用朗读。可在下方试听，保存后生效。联网音色需要网络。
-            </p>
-            <button type="button" id="refreshVoices" class="test-btn">刷新音色列表</button>
-          </div>
-          <div class="field">
-            <label for="speechRate">朗读速度</label
-            ><select id="speechRate">
-              <option value="0.7">0.7× 慢速</option>
-              <option value="0.85">0.85× 稍慢</option>
-              <option value="1">1× 正常</option>
-              <option value="1.25">1.25× 稍快</option>
-              <option value="1.5">1.5× 快速</option>
-            </select>
-          </div>
-          <div class="lang-selectors">
+    <div class="settings-layout">
+      <aside class="settings-sidebar">
+        <a class="brand" href="#reading"
+          ><span class="brand-mark" data-icon="wave"></span
+          ><span class="brand-name">WordVoice</span></a
+        >
+        <p class="eyebrow">MAKE IT YOURS</p>
+        <nav aria-label="设置导航">
+          <a href="#reading" class="active" aria-current="location"
+            ><span data-icon="wave"></span>朗读与翻译</a
+          ><a href="#services"><span data-icon="sparkle"></span>云端服务</a
+          ><a href="#activity"><span data-icon="chart"></span>最近发音</a
+          ><a href="#storage"><span data-icon="book"></span>音频缓存</a
+          ><a href="#help"><span data-icon="cards"></span>使用指南</a>
+        </nav>
+        <div class="sidebar-note">
+          <kbd>S</kbd>
+          <p>一个按键，<br />让好奇继续。</p>
+        </div>
+      </aside>
+      <main class="container">
+        <header class="settings-heading">
+          <span class="eyebrow">PREFERENCES</span>
+          <h1>为你的阅读，调好声音。</h1>
+          <p>熟悉的音色，舒服的节奏。让每次查词都自然一些。</p>
+        </header>
+        <form id="settingsForm">
+          <section class="section" id="reading" aria-labelledby="readingTitle">
+            <h2 id="readingTitle">朗读与翻译</h2>
+            <p class="section-desc wide">选中文字后，声音、释义和记录会同时准备好。</p>
             <div class="field">
-              <label for="sourceLanguage">原文语言</label
-              ><select id="sourceLanguage"></select>
+              <label for="ttsProvider">发音服务</label
+              ><select id="ttsProvider"></select>
+              <p class="hint">
+                浏览器语音启动快。词典原音适用于英文单词。云端发音等待最多 5
+                秒，随后切换浏览器语音。
+              </p>
             </div>
             <div class="field">
-              <label for="targetLanguage">翻译语言</label
-              ><select id="targetLanguage"></select>
+              <label for="pronunciation">英语口音</label
+              ><select id="pronunciation">
+                <option value="us">美式英语</option>
+                <option value="uk">英式英语</option>
+              </select>
+              <p class="hint">浏览器会优先使用对应口音的本地语音。云端口音由所选音色决定。</p>
             </div>
-          </div>
-          <div class="field">
-            <label class="checkbox-label"
-              ><input type="checkbox" id="showTranslation" /> 查询并显示翻译</label
-            >
-          </div>
-          <div class="field">
-            <label for="translationProvider">翻译服务</label
-            ><select id="translationProvider"></select>
-            <p class="hint">免费翻译依赖 Google 网络服务。AI 翻译失败时会尝试免费翻译。</p>
-          </div>
-          <div class="field">
-            <label for="aiProvider">AI 例句服务</label
-            ><select id="aiProvider"></select>
-          </div>
-          <div class="test-area">
-            <button type="button" id="testTts" class="test-btn">试听当前发音</button
-            ><button type="button" id="testTranslation" class="test-btn">测试翻译</button
-            ><button type="button" id="testAi" class="test-btn">测试 AI 例句</button
-            ><button type="button" id="stopSpeech" class="test-btn">停止朗读</button>
-            <div id="testLog" class="test-log" role="status"></div>
-          </div>
-          <p class="hint">
-            测试使用表单中当前填写的值。点击「保存设置」后，网页朗读会使用这些设置。
-          </p>
+            <div class="field wide">
+              <label for="browserVoice">浏览器音色</label>
+              <select id="browserVoice">
+                <option value="">自动选择朗读音色</option>
+              </select>
+              <p id="browserVoiceHint" class="hint">正在读取可用音色…</p>
+              <p class="hint">
+                用于浏览器朗读和云端失败后的备用朗读。可在下方试听，保存后生效。联网音色需要网络。
+              </p>
+              <div class="voice-preview">
+                <button type="button" id="testTts" class="primary-btn">
+                  <span data-icon="wave"></span>试听当前发音</button
+                ><button type="button" id="stopSpeech" class="test-btn">停止朗读</button
+                ><button type="button" id="refreshVoices" class="test-btn">刷新音色列表</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="speechRate">朗读速度</label
+              ><select id="speechRate">
+                <option value="0.7">0.7× 慢速</option>
+                <option value="0.85">0.85× 稍慢</option>
+                <option value="1">1× 正常</option>
+                <option value="1.25">1.25× 稍快</option>
+                <option value="1.5">1.5× 快速</option>
+              </select>
+            </div>
+            <div class="lang-selectors">
+              <div class="field">
+                <label for="sourceLanguage">原文语言</label
+                ><select id="sourceLanguage"></select>
+              </div>
+              <div class="field">
+                <label for="targetLanguage">翻译语言</label
+                ><select id="targetLanguage"></select>
+              </div>
+            </div>
+            <div class="field">
+              <label class="checkbox-label"
+                ><input type="checkbox" id="showTranslation" /> 查询并显示翻译</label
+              >
+            </div>
+            <div class="field">
+              <label for="translationProvider">翻译服务</label
+              ><select id="translationProvider"></select>
+              <p class="hint">免费翻译依赖 Google 网络服务。AI 翻译失败时会尝试免费翻译。</p>
+            </div>
+            <div class="field">
+              <label for="aiProvider">AI 例句服务</label
+              ><select id="aiProvider"></select>
+            </div>
+            <div class="test-area">
+              <button type="button" id="testTranslation" class="test-btn">测试翻译</button
+              ><button type="button" id="testAi" class="test-btn">测试 AI 例句</button>
+              <div id="testLog" class="test-log" role="status"></div>
+            </div>
+            <p class="hint wide">
+              测试使用表单中当前填写的值。点击「保存设置」后，网页朗读会使用这些设置。
+            </p>
+          </section>
+          <section class="section" id="services" aria-labelledby="servicesTitle">
+            <h2 id="servicesTitle">连接你喜欢的声音</h2>
+            <p class="section-desc">按需填写。密钥只保存在当前浏览器中。每个字段只需填写一次。</p>
+            <div id="providerFields"></div>
+          </section>
+        </form>
+        <section class="section" id="activity" aria-labelledby="activityTitle">
+          <h2 id="activityTitle">最近发音</h2>
+          <p id="ttsStatus" class="hint">正在加载设置…</p>
+          <div id="ttsLogContainer" class="tts-log-container"></div>
+          <button type="button" id="refreshLogBtn" class="test-btn">刷新日志</button>
+          <p class="hint">耗时记录从收到请求到启动播放的时间。浏览器重启后清空日志。</p>
         </section>
-        <section class="section">
-          <h2>云端服务配置</h2>
-          <p class="section-desc">按需填写。密钥只保存在当前浏览器中。每个字段只需填写一次。</p>
-          <div id="providerFields"></div>
+        <section class="section" id="storage" aria-labelledby="storageTitle">
+          <h2 id="storageTitle">音频缓存</h2>
+          <p>共 <span id="cacheCount">0</span> 条，约 <span id="cacheSize">0</span> KB</p>
+          <p class="hint">
+            最多缓存 200 段音频，保存 30 天。清理缓存后会重新获取音频，单词本保留。
+          </p>
+          <button type="button" id="clearCacheBtn" class="danger-btn">清除音频缓存</button>
+        </section>
+        <section class="section" id="help" aria-labelledby="helpTitle">
+          <h2 id="helpTitle">从一个词开始</h2>
+          <p>
+            鼠标选中文本后按 <kbd>S</kbd> 或 <kbd>`</kbd> 朗读。按
+            <kbd>Esc</kbd> 关闭提示并停止朗读。
+          </p>
+          <p>输入框中可以使用浏览器快捷键 <kbd>Ctrl+Shift+S</kbd>。密码字段保留原有输入行为。</p>
+          <p class="hint">
+            每次最多 2000 个字符。Chrome 内部页面、扩展商店和浏览器内置 PDF
+            阅读器限制脚本运行。此类内容可复制到普通网页后选中朗读。
+          </p>
+          <a href="#" id="openShortcuts" class="link-btn">修改浏览器快捷键</a>
         </section>
         <div class="actions">
-          <button type="submit" id="saveBtn" class="primary-btn" disabled>保存设置</button
-          ><span id="saveStatus" class="save-status" role="status"></span>
+          <button type="submit" form="settingsForm" id="saveBtn" class="primary-btn" disabled>
+            保存设置</button
+          ><span id="saveStatus" class="save-status show" role="status"
+            >设置已保存在当前浏览器</span
+          >
         </div>
-      </form>
-      <section class="section">
-        <h2>最近发音</h2>
-        <p id="ttsStatus" class="hint">正在加载设置…</p>
-        <div id="ttsLogContainer" class="tts-log-container"></div>
-        <button type="button" id="refreshLogBtn" class="test-btn">刷新日志</button>
-        <p class="hint">耗时记录从收到请求到启动播放的时间。浏览器重启后清空日志。</p>
-      </section>
-      <section class="section">
-        <h2>音频缓存</h2>
-        <p>共 <span id="cacheCount">0</span> 条，约 <span id="cacheSize">0</span> KB</p>
-        <p class="hint">最多缓存 200 段音频，保存 30 天。清理缓存后会重新获取音频，单词本保留。</p>
-        <button type="button" id="clearCacheBtn" class="danger-btn">清除音频缓存</button>
-      </section>
-      <section class="section">
-        <h2>使用帮助</h2>
-        <p>
-          鼠标选中文本后按 <kbd>S</kbd> 或 <kbd>`</kbd> 朗读。按 <kbd>Esc</kbd> 关闭提示并停止朗读。
-        </p>
-        <p>输入框中可以使用浏览器快捷键 <kbd>Ctrl+Shift+S</kbd>。密码字段保留原有输入行为。</p>
-        <p class="hint">
-          每次最多 2000 个字符。Chrome 内部页面、扩展商店和浏览器内置 PDF
-          阅读器限制脚本运行。此类内容可复制到普通网页后选中朗读。
-        </p>
-        <a href="#" id="openShortcuts" class="link-btn">修改浏览器快捷键</a>
-      </section>
-    </main>
+      </main>
+    </div>
     <script type="module" src="options.js"></script>
   </body>
 </html>

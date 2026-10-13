@@ -6,6 +6,9 @@ import {
   displayWord,
   enableKeyboardClick,
   formatDate,
+  icon,
+  emptyState,
+  wireSearch,
 } from '../lib/ui.js';
 import { safePageUrl } from '../lib/text.js';
 import { renderMasteryChart, renderDailyChart } from './charts.js';
@@ -24,6 +27,7 @@ let reviewWords = [],
   reviewGeneration = 0;
 let reviewStats = { mastered: 0, learning: 0, new: 0 };
 let busyReview = false;
+let detailReturnId = null;
 
 async function loadWords(append = false) {
   const generation = ++listGeneration;
@@ -47,10 +51,17 @@ async function loadWords(append = false) {
       ? rows
           .map(
             (w) =>
-              `<div class="word-card" data-id="${w.id}" role="button" aria-label="查看 ${esc(displayWord(w))}"><div class="word-card-header"><div class="word-main"><div class="word-text-row"><span class="word-text">${esc(displayWord(w))}</span><span class="word-type-badge">${{ word: '单词', phrase: '短语', sentence: '句子' }[w.type || 'word']}</span></div><span class="word-phonetic">${esc(w.phonetic)}</span></div><div class="word-actions"><span class="word-frequency">${w.frequency}次</span><button class="btn-play-small" title="播放发音" aria-label="朗读 ${esc(displayWord(w))}">▶</button></div></div>${w.translation ? `<div class="word-translation">${esc(w.translation)}</div>` : ''}${w.definitions?.[0]?.meaning ? `<div class="word-definition">${esc(w.definitions[0].meaning)}</div>` : ''}</div>`,
+              `<div class="word-card" data-id="${w.id}" ><button class="word-open" aria-label="查看 ${esc(displayWord(w))}"><span class="word-main"><span class="word-text-row"><span class="word-text">${esc(displayWord(w))}</span><span class="word-type-badge">${{ word: '单词', phrase: '短语', sentence: '句子' }[w.type || 'word']}</span></span><span class="word-phonetic">${esc(w.phonetic)}</span></span>${w.translation ? `<span class="word-translation">${esc(w.translation)}</span>` : ''}${w.definitions?.[0]?.meaning ? `<span class="word-definition">${esc(w.definitions[0].meaning)}</span>` : ''}</button><div class="word-actions"><span class="word-frequency">${w.frequency}次</span><button class="btn-play-small" title="播放发音" aria-label="朗读 ${esc(displayWord(w))}">${icon('wave')}</button></div></div>`,
           )
           .join('')
-      : '<div class="word-list-empty">没有匹配的记录。选中文本后按 S，即可加入单词本。</div>';
+      : emptyState(
+          $('searchInput').value || filter !== 'all' || type !== 'all'
+            ? '没有匹配的记录'
+            : '你的词汇，从这里生长',
+          $('searchInput').value || filter !== 'all' || type !== 'all'
+            ? '换一个关键词，或调整上方筛选。'
+            : '回到网页，选中一个好奇的词，按 S。发音与释义会留在这里。',
+        );
     if (rows.length < result.total)
       list.insertAdjacentHTML('beforeend', '<button id="loadMore">加载更多</button>');
     $('loadMore')?.addEventListener('click', (event) => {
@@ -60,14 +71,18 @@ async function loadWords(append = false) {
     list.querySelectorAll('.word-card').forEach((el) => {
       const word = rows.find((w) => w.id === Number(el.dataset.id));
       el.onclick = () => showWordDetail(word.id);
-      el.querySelector('button').onclick = (event) => {
+      el.querySelector('.btn-play-small').onclick = (event) => {
         event.stopPropagation();
         play(displayWord(word), event.currentTarget);
       };
     });
     enableKeyboardClick(list);
   } catch (error) {
+    if (generation !== listGeneration) return;
     showStatus(error.message, true);
+    if (!rows.length)
+      $('wordList').innerHTML = emptyState('暂时无法读取单词', '重新打开单词本即可重试。');
+    if ($('loadMore')) $('loadMore').disabled = false;
   }
 }
 function switchView(next) {
@@ -79,12 +94,32 @@ function switchView(next) {
   }
   for (const name of ['wordList', 'review', 'stats'])
     $(`${name}View`).style.display = name === next ? 'flex' : 'none';
-  $('headerTitle').textContent = { wordList: '单词本', review: '复习模式', stats: '学习统计' }[
+  $('headerTitle').textContent = { wordList: '单词本', review: '温故，知新。', stats: '学习足迹' }[
     next
   ];
+  $('viewEyebrow').textContent = {
+    wordList: 'YOUR WORD COLLECTION',
+    review: 'A MOMENT TO REMEMBER',
+    stats: 'SMALL STEPS, REAL PROGRESS',
+  }[next];
+  $('viewDescription').textContent = {
+    wordList: '把阅读中的偶遇，变成自己的词汇。',
+    review: '给遇见过的词，再一次熟悉的机会。',
+    stats: '每一次好奇，都留下了痕迹。',
+  }[next];
+  for (const [id, name] of [
+    ['libraryViewBtn', 'wordList'],
+    ['reviewModeBtn', 'review'],
+    ['statsViewBtn', 'stats'],
+  ]) {
+    $(id).classList.toggle('active', name === next);
+    if (name === next) $(id).setAttribute('aria-current', 'page');
+    else $(id).removeAttribute('aria-current');
+  }
+  $('toolsMenu').open = false;
 }
 function speakButton(text) {
-  return `<button class="btn-speak-inline" data-text="${esc(text)}" title="朗读" aria-label="朗读">🔊</button>`;
+  return `<button class="btn-speak-inline" data-text="${esc(text)}" title="朗读" aria-label="朗读">${icon('wave')}</button>`;
 }
 function bindSpeak(container) {
   container.querySelectorAll('[data-text]').forEach((button) => {
@@ -104,7 +139,12 @@ async function showWordDetail(id) {
       return;
     }
     selectedWord = word;
+    detailReturnId = id;
+    for (const el of document.querySelector('.panel-container').children)
+      if (!['wordDetail', 'deleteDialog'].includes(el.id)) el.inert = true;
+    $('toolsMenu').open = false;
     $('wordDetail').style.display = 'flex';
+    document.querySelector('.detail-content').scrollTop = 0;
     $('detailWord').textContent = displayWord(word);
     $('detailPhonetic').textContent = word.phonetic || '';
     $('detailFrequency').textContent = word.frequency;
@@ -141,7 +181,14 @@ async function showWordDetail(id) {
 function hideWordDetail() {
   detailGeneration++;
   selectedWord = null;
+  const wasOpen = $('wordDetail').style.display !== 'none';
   $('wordDetail').style.display = 'none';
+  for (const el of document.querySelector('.panel-container').children) el.inert = false;
+  if (wasOpen)
+    (
+      document.querySelector(`.word-card[data-id="${detailReturnId}"] .word-open`) ||
+      $('searchInput')
+    ).focus();
 }
 async function refreshTranslation() {
   const word = selectedWord;
@@ -192,11 +239,20 @@ async function generateExamples() {
 }
 async function removeWord() {
   const word = selectedWord;
-  if (!word || !confirm(`删除“${displayWord(word)}”及其上下文记录？`)) return;
+  if (!word) return;
+  $('deleteDescription').textContent = `“${displayWord(word)}”及其上下文将从单词本中移除。`;
+  const dialog = $('deleteDialog');
+  dialog.returnValue = '';
+  const answer = new Promise((resolve) =>
+    dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }),
+  );
+  dialog.showModal();
+  if ((await answer) !== 'delete') return;
   try {
     await send('deleteWord', { wordId: word.id });
     hideWordDetail();
     await loadWords();
+    $('searchInput').focus();
     showStatus('已删除');
   } catch (error) {
     showStatus(error.message, true);
@@ -246,9 +302,21 @@ async function startReview() {
     const { words } = await send('getWordsForReview', { limit: 20 });
     if (generation !== reviewGeneration) return;
     if (!words.length) {
-      showStatus('请先保存单词或短语');
+      switchView('review');
+      $('reviewEmpty').hidden = false;
+      $('reviewEmpty').innerHTML = emptyState(
+        '先遇见，再重逢',
+        '在网页选中单词或短语，按 S 保存。下次来这里，就可以开始复习。',
+        'cards',
+      );
+      $('reviewSummary').style.display = 'none';
+      $('flashcardContainer').style.display = 'none';
+      document.querySelector('.mastery-buttons').style.display = 'none';
+      document.querySelector('.review-progress').hidden = true;
       return;
     }
+    $('reviewEmpty').hidden = true;
+    document.querySelector('.review-progress').hidden = false;
     switchView('review');
     reviewing = true;
     reviewWords = words;
@@ -275,13 +343,16 @@ function showCard() {
     $('summaryKnow').textContent = reviewStats.mastered;
     $('summaryLearning').textContent = reviewStats.learning;
     $('summaryUnknown').textContent = reviewStats.new;
+    $('reviewProgressText').textContent = `${reviewWords.length}/${reviewWords.length}`;
+    document.querySelector('.summary-title').focus();
     return;
   }
   const word = reviewWords[cardIndex];
   $('flashcard').classList.remove('flipped');
-  $('flashcard').setAttribute('aria-pressed', 'false');
+  $('cardFlipBtn').setAttribute('aria-expanded', 'false');
   $('reviewProgressText').textContent = `${cardIndex + 1}/${reviewWords.length}`;
   $('cardWord').textContent = displayWord(word);
+  $('cardFlipBtn').focus({ preventScroll: true });
   $('cardBackWord').textContent = displayWord(word);
   $('cardPhonetic').textContent = word.phonetic || '';
   $('cardDefinitions').innerHTML =
@@ -289,7 +360,9 @@ function showCard() {
 }
 function flipCard() {
   $('flashcard').classList.toggle('flipped');
-  $('flashcard').setAttribute('aria-pressed', String($('flashcard').classList.contains('flipped')));
+  const flipped = $('flashcard').classList.contains('flipped');
+  $('cardFlipBtn').setAttribute('aria-expanded', String(flipped));
+  $(flipped ? 'flipBackBtn' : 'cardFlipBtn').focus({ preventScroll: true });
 }
 async function grade(level) {
   if (busyReview || !reviewing) return;
@@ -348,17 +421,18 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.filter-tab').forEach((button) => {
     button.onclick = () => {
       filter = button.dataset.filter;
-      document
-        .querySelectorAll('.filter-tab')
-        .forEach((b) => b.classList.toggle('active', b === button));
+      document.querySelectorAll('.filter-tab').forEach((b) => {
+        b.classList.toggle('active', b === button);
+        b.setAttribute('aria-pressed', String(b === button));
+      });
       loadWords();
     };
   });
   let timer;
-  $('searchInput').oninput = () => {
+  wireSearch($('searchInput'), $('clearSearch'), () => {
     clearTimeout(timer);
     timer = setTimeout(() => loadWords(), 150);
-  };
+  });
   $('backBtn').onclick = hideWordDetail;
   $('detailPlayBtn').setAttribute('aria-label', '朗读当前文本');
   $('refreshTranslation').onclick = refreshTranslation;
@@ -368,10 +442,13 @@ document.addEventListener('DOMContentLoaded', () => {
     switchView('stats');
     loadStats();
   };
-  $('backFromStatsBtn').onclick = $('backToListBtn').onclick = () => {
-    switchView('wordList');
-    loadWords();
-  };
+  $('libraryViewBtn').onclick =
+    $('backFromStatsBtn').onclick =
+    $('backToListBtn').onclick =
+      () => {
+        switchView('wordList');
+        loadWords();
+      };
   document.querySelectorAll('.clickable-stat').forEach((button) => {
     button.setAttribute('role', 'button');
     button.onclick = () => {
@@ -379,25 +456,32 @@ document.addEventListener('DOMContentLoaded', () => {
       type = 'all';
       $('typeFilter').value = type;
       $('searchInput').value = '';
-      document
-        .querySelectorAll('.filter-tab')
-        .forEach((b) => b.classList.toggle('active', b.dataset.filter === filter));
+      document.querySelectorAll('.filter-tab').forEach((b) => {
+        b.classList.toggle('active', b.dataset.filter === filter);
+        b.setAttribute('aria-pressed', String(b.dataset.filter === filter));
+      });
       switchView('wordList');
       loadWords();
     };
   });
-  $('importBtn').onclick = () => $('importFile').click();
+  $('importBtn').onclick = () => {
+    $('toolsMenu').open = false;
+    $('importFile').click();
+  };
   $('importFile').onchange = (event) => {
     if (event.target.files[0]) importData(event.target.files[0]);
   };
-  $('exportBtn').onclick = exportData;
+  $('exportBtn').onclick = () => {
+    $('toolsMenu').open = false;
+    exportData();
+  };
   $('settingsBtn').onclick = () => chrome.runtime.openOptionsPage();
   $('stopSpeech').onclick = () =>
     send('stopSpeech').catch((error) => showStatus(error.message, true));
   $('reviewModeBtn').onclick = $('btnRestartReview').onclick = startReview;
   $('flashcard').onclick = flipCard;
-  $('flashcard').setAttribute('role', 'button');
-  $('flashcard').setAttribute('aria-label', '翻转复习卡片');
+  $('flashcard').setAttribute('role', 'group');
+  $('flashcard').setAttribute('aria-label', '复习卡片');
   $('cardPlayBtn').onclick = (event) => {
     event.stopPropagation();
     const word = reviewWords[cardIndex];
@@ -407,7 +491,43 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnLearning').onclick = () => grade('learning');
   $('btnUnknown').onclick = () => grade('new');
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') hideWordDetail();
+    if (event.key === 'Escape') {
+      if (!$('deleteDialog').open) hideWordDetail();
+      $('toolsMenu').open = false;
+    }
+    if (event.key === 'Tab' && selectedWord && !$('deleteDialog').open) {
+      const controls = [
+        ...$('wordDetail').querySelectorAll('button:not(:disabled), a[href]'),
+      ].filter((el) => el.getClientRects().length);
+      const first = controls[0],
+        last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    }
+    if (
+      !reviewing ||
+      selectedWord ||
+      event.repeat ||
+      event.isComposing ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.target.matches('input,textarea,select')
+    )
+      return;
+    if (['1', '2', '3'].includes(event.key)) {
+      event.preventDefault();
+      grade({ 1: 'mastered', 2: 'learning', 3: 'new' }[event.key]);
+    }
+    if (event.code === 'Space' && !event.target.closest('button,[role="button"],summary')) {
+      event.preventDefault();
+      flipCard();
+    }
   });
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'dataChanged') {
@@ -422,6 +542,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (area === 'local' && changes.pendingWordDetail?.newValue)
       pendingDetail().catch((error) => showStatus(error.message, true));
   });
+  document.addEventListener('click', (event) => {
+    if (!$('toolsMenu').contains(event.target)) $('toolsMenu').open = false;
+  });
+  document
+    .querySelectorAll('.filter-tab')
+    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.filter === filter)));
   enableKeyboardClick();
   loadWords();
   pendingDetail().catch((error) => showStatus(error.message, true));

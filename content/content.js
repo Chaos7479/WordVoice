@@ -20,9 +20,36 @@
     lastTriggered = -Infinity,
     lastText = '';
   const style = `
-    * { box-sizing: border-box; } .card { width: min(360px, calc(100vw - 24px)); max-height: min(480px, calc(100vh - 24px)); overflow: auto; padding: 16px; color: #eff4ff; background: #182336; border: 1px solid #506787; border-radius: 14px; box-shadow: 0 8px 32px #0005; font: 14px/1.5 system-ui, sans-serif; text-align: left; }
-    .head { display: flex; align-items: flex-start; gap: 12px; } strong { flex: 1; font-size: 17px; overflow-wrap: anywhere; white-space: pre-wrap; } p { margin: 7px 0 0; overflow-wrap: anywhere; } .phonetic { color: #a8c4ef; } .status { color: #b8c8df; font-size: 12px; } .error { color: #ffd296; } .buttons { display: flex; gap: 8px; margin-top: 12px; } button { font: inherit; font-size: 12px; color: #eff4ff; background: #2c4261; border: 1px solid #617999; border-radius: 7px; padding: 5px 10px; cursor: pointer; } button:focus-visible { outline: 2px solid #8ac5ff; outline-offset: 2px; } .close { padding: 1px 7px; } [hidden] { display: none !important; }
+    :host { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    .card { --bg:#fff; --text:#252630; --secondary:#60616d; --line:#dededc; --accent:#4d52bd; --tint:#ededfa; --warn:#8b621c; width:min(360px,calc(100vw - 24px)); max-height:min(480px,calc(100vh - 24px)); overflow:auto; padding:18px; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:18px; box-shadow:0 12px 44px #20203524,0 2px 6px #2020350d; font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; text-align:left; -webkit-font-smoothing:antialiased; animation:enter .16s ease-out; }
+    .brand { display:flex; align-items:center; gap:7px; margin-bottom:12px; color:var(--secondary); font-size:10px; letter-spacing:.5px; }
+    .brand svg { width:16px; height:16px; color:var(--accent); }
+    .brand .close { margin-left:auto; }
+    .head { display:flex; align-items:flex-start; gap:12px; }
+    strong { flex:1; font:25px/1.3 'Iowan Old Style',Georgia,serif; letter-spacing:-.4px; overflow-wrap:anywhere; white-space:pre-wrap; max-height:132px; overflow:auto; }
+    p { margin:8px 0 0; overflow-wrap:anywhere; }
+    .phonetic { color:var(--secondary); font-size:12px; }
+    .translation { margin-top:12px; font-size:15px; }
+    .status { padding-top:12px; margin-top:14px; border-top:1px solid var(--line); color:var(--secondary); font-size:11px; line-height:1.75; }
+    .error { color:var(--warn); font-size:12px; }
+    .buttons { display:flex; align-items:center; gap:8px; margin-top:14px; }
+    .buttons .escape { margin-left:auto; font-size:10px; color:var(--secondary); }
+    button { font:12px -apple-system,BlinkMacSystemFont,sans-serif; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:9px; min-height:32px; padding:7px 11px; cursor:pointer; }
+    button:hover { background:var(--tint); } button:active { transform:scale(.97); }
+    button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+    .replay { color:var(--accent); background:var(--tint); border-color:transparent; }
+    .close { border:0; min-height:26px; width:26px; padding:0; color:var(--secondary); font-size:19px; }
+    [hidden] { display:none!important; }
+    @keyframes enter { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    @media(prefers-color-scheme:dark) { .card { --bg:#23242c; --text:#ececf2; --secondary:#b9bac8; --line:#3b3c49; --accent:#b2b5ff; --tint:#32334e; --warn:#e3c189; box-shadow:0 12px 44px #0006; } }
+    @media(prefers-reduced-motion:reduce) { .card { animation:none; } button:active { transform:none; } }
+    @media(prefers-contrast:more) { .card,button { border-color:var(--secondary); } }
   `;
+  function scheduleDismiss() {
+    clearTimeout(timer);
+    if (!host?.matches(':hover') && !shadow?.activeElement) timer = setTimeout(dismiss, 12000);
+  }
   function dismiss() {
     clearTimeout(timer);
     host?.remove();
@@ -59,8 +86,7 @@
         .join('；'),
     );
     if (current.lookupDone && (current.speaking || current.speechError || current.stopped)) {
-      clearTimeout(timer);
-      timer = setTimeout(dismiss, 12000);
+      scheduleDismiss();
     }
     position();
   }
@@ -90,7 +116,7 @@
     host.style.cssText =
       'all: initial !important; position: fixed !important; z-index: 2147483647 !important; display: block !important;';
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${style}</style><div class="card" role="region" aria-label="WordVoice 选词结果"><div class="head"><strong></strong><button class="close" aria-label="关闭">×</button></div><div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p><p class="status">正在启动朗读…</p><p class="error" hidden></p></div><div class="buttons"><button class="replay">再读一次</button><button class="stop">停止朗读</button></div></div>`;
+    shadow.innerHTML = `<style>${style}</style><div class="card" role="region" aria-label="WordVoice 选词结果"><div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4"/></svg>WordVoice<button class="close" aria-label="关闭">×</button></div><div class="head"><strong tabindex="0"></strong></div><div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p><p class="status">正在启动朗读…</p><p class="error" hidden></p></div><div class="buttons"><button class="replay">再读一次</button><button class="stop">停止朗读</button><span class="escape">Esc 关闭</span></div></div>`;
     shadow.querySelector('strong').textContent = text;
     shadow.querySelector('.close').onclick = dismiss;
     shadow.querySelector('.stop').onclick = () => {
@@ -101,12 +127,16 @@
       }
     };
     shadow.querySelector('.replay').onclick = () => {
-      if (current) start(current.text, current.rect, current.sentence);
+      if (current) {
+        start(current.text, current.rect, current.sentence);
+        shadow?.querySelector('.replay').focus();
+      }
     };
     host.addEventListener('mouseenter', () => clearTimeout(timer));
+    host.addEventListener('focusin', () => clearTimeout(timer));
+    host.addEventListener('focusout', () => setTimeout(scheduleDismiss, 0));
     host.addEventListener('mouseleave', () => {
-      clearTimeout(timer);
-      timer = setTimeout(dismiss, 12000);
+      scheduleDismiss();
     });
     (document.body || document.documentElement).appendChild(host);
   }

@@ -102,7 +102,7 @@ function renderFields(settings) {
   $('providerFields').innerHTML = Object.entries(fields)
     .map(
       ([provider, spec]) =>
-        `<details class="credential-section" ${provider === settings.ttsProvider || provider === settings.translationProvider || provider === settings.aiProvider ? 'open' : ''}><summary>${spec.title}</summary><p class="hint">${spec.hint}</p>${spec.fields
+        `<details class="credential-section" data-provider="${provider}" ${provider === settings.ttsProvider || provider === settings.translationProvider || provider === settings.aiProvider ? 'open' : ''}><summary>${spec.title}</summary><p class="hint">${spec.hint}</p>${spec.fields
           .map(([key, label, type]) => {
             const id = `${provider}-${key}`;
             return `<div class="field"><label for="${id}">${label}</label>${
@@ -181,6 +181,7 @@ async function load() {
     $('saveBtn').disabled = false;
     $('settingsForm').oninput = () => {
       dirty = true;
+      $('saveStatus').dataset.dirty = 'true';
       $('saveStatus').textContent = '有未保存的更改';
       $('saveStatus').classList.add('show');
     };
@@ -188,6 +189,12 @@ async function load() {
   } catch (error) {
     showStatus(error.message, true);
   }
+}
+for (const id of ['ttsProvider', 'translationProvider', 'aiProvider']) {
+  $(id).addEventListener('change', () => {
+    const section = document.querySelector(`.credential-section[data-provider="${$(id).value}"]`);
+    if (section) section.open = true;
+  });
 }
 $('settingsForm').onsubmit = async (event) => {
   event.preventDefault();
@@ -197,6 +204,7 @@ $('settingsForm').onsubmit = async (event) => {
     loadedSettings = collect();
     await saveSettings(loadedSettings);
     dirty = false;
+    $('saveStatus').dataset.dirty = 'false';
     $('saveStatus').textContent = '已保存';
     $('saveStatus').classList.add('show');
     showStatus('设置已保存');
@@ -224,8 +232,13 @@ async function test(type) {
   const provider =
     settings[type === 'tts' ? 'ttsProvider' : type === 'ai' ? 'aiProvider' : 'translationProvider'];
   const log = $('testLog');
+  $(type === 'tts' ? 'testTts' : type === 'ai' ? 'testAi' : 'testTranslation').parentElement.append(
+    log,
+  );
   log.classList.add('visible');
-  log.textContent = '正在测试…';
+  log.textContent = '正在连接并准备结果…';
+  log.dataset.state = 'loading';
+  log.setAttribute('aria-busy', 'true');
   const started = performance.now();
   try {
     const result = await send('testApi', {
@@ -235,11 +248,14 @@ async function test(type) {
       preferences: settings,
     });
     if (result.error) throw new Error(result.error);
+    log.dataset.state = 'success';
     log.textContent = `成功 · ${Math.round(performance.now() - started)} ms\n${result.result}`;
   } catch (error) {
+    log.dataset.state = 'error';
     log.textContent = `测试失败：${error.message}`;
   } finally {
     testing = false;
+    log.removeAttribute('aria-busy');
     document.querySelectorAll('#testTts, #testTranslation, #testAi').forEach((b) => {
       b.disabled = false;
     });
@@ -286,4 +302,21 @@ $('openShortcuts').onclick = (event) => {
   event.preventDefault();
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
 };
+const navLinks = [...document.querySelectorAll('.settings-sidebar nav a')];
+const observer = new IntersectionObserver(
+  (entries) => {
+    const visible = entries
+      .filter((entry) => entry.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+    if (!visible) return;
+    navLinks.forEach((link) => {
+      const active = link.hash === `#${visible.target.id}`;
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+  },
+  { rootMargin: '-10% 0px -65% 0px', threshold: 0 },
+);
+document.querySelectorAll('section[id]').forEach((section) => observer.observe(section));
 load();

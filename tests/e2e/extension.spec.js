@@ -1,4 +1,5 @@
 import { test, expect, chromium } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -392,7 +393,12 @@ test('import, export, malicious content and deletion work through UI', async () 
     words: [{ id: 4, word: 'quoted " phrase', translation: '<img src=x onerror=alert(1)>' }],
     contexts: [{ wordId: 4, sentence: 'Example sentence', pageUrl: 'javascript:alert(1)' }],
   };
-  await panel.locator('#importFile').setInputFiles({
+  const chooseFile = panel.waitForEvent('filechooser');
+  await panel.locator('#toolsMenu summary').click();
+  await panel.locator('#importBtn').click();
+  await (
+    await chooseFile
+  ).setFiles({
     name: 'backup.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(backup)),
@@ -402,13 +408,15 @@ test('import, export, malicious content and deletion work through UI', async () 
   await panel.locator('.word-card .btn-play-small').click();
   await expect.poll(() => worker.evaluate(() => __calls[0]?.text)).toBe('quoted " phrase');
   const downloaded = panel.waitForEvent('download');
+  await panel.locator('#toolsMenu summary').click();
   await panel.locator('#exportBtn').click();
   const download = await downloaded;
   expect(download.suggestedFilename()).toMatch(/wordvoice-.*\.json/);
   await panel.locator('.word-card').click();
   await expect(panel.locator('#detailContexts a')).toHaveCount(0);
-  panel.once('dialog', (dialog) => dialog.accept());
   await panel.locator('#deleteBtn').click();
+  await expect(panel.locator('#deleteDialog')).toBeVisible();
+  await panel.locator('#confirmDelete').click();
   await expect(panel.locator('.word-card')).toHaveCount(0);
   await panel
     .locator('#importFile')
@@ -685,6 +693,242 @@ test('removed browser voices remain visible in settings and fall back when speak
   await expect(options.locator('#browserVoiceHint')).toContainText('自动模式');
   await options.locator('#testTts').click();
   await expect(options.locator('#testLog')).toContainText('Removed Voice');
+});
+
+const designWords = [
+  {
+    word: 'serendipity',
+    phonetic: '/ˌser.ənˈdɪp.ə.ti/',
+    translation: '不期而遇的美好；意外发现的幸运',
+    frequency: 7,
+    mastery: 'learning',
+    definitions: [
+      {
+        partOfSpeech: 'noun',
+        meaning:
+          'The chance of finding something beautiful when you are looking for something else.',
+        example: 'Our meeting was pure serendipity.',
+      },
+    ],
+  },
+  {
+    word: 'resonance',
+    phonetic: '/ˈrez.ən.əns/',
+    translation: '共鸣；回响',
+    frequency: 4,
+    mastery: 'mastered',
+  },
+  {
+    word: 'a silver lining',
+    translation: '困境中令人欣慰的一面',
+    frequency: 3,
+    mastery: 'learning',
+  },
+  { word: 'ephemeral', phonetic: '/ɪˈfem.ər.əl/', translation: '短暂的；转瞬即逝的', frequency: 2 },
+  {
+    word: 'Stay curious. There is always more to discover.',
+    translation: '保持好奇，总有更多值得发现。',
+    frequency: 1,
+  },
+  {
+    word: 'wonder',
+    phonetic: '/ˈwʌn.dər/',
+    translation: '惊奇；想知道',
+    frequency: 5,
+    mastery: 'mastered',
+  },
+];
+async function accessible(page, label) {
+  const result = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  if (result.violations.length)
+    await page.screenshot({ path: 'test-results/accessibility-failure.png' });
+  expect(
+    result.violations.map((v) => ({
+      id: v.id,
+      impact: v.impact,
+      nodes: v.nodes.map((n) => ({ target: n.target, message: n.failureSummary })),
+    })),
+    label,
+  ).toEqual([]);
+}
+for (const colorScheme of ['light', 'dark']) {
+  test(`design audit: all surfaces in ${colorScheme} mode`, async () => {
+    test.setTimeout(90000);
+    await seed(
+      designWords.map((w, i) => ({
+        ...w,
+        createdAt: Date.now() - i * 86400000,
+        lastAccessedAt: Date.now() - i * 3600000,
+      })),
+    );
+    const panel = await extensionPage('sidepanel');
+    await panel.setViewportSize({ width: 380, height: 850 });
+    await panel.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await expect(panel.locator('.word-card')).toHaveCount(6);
+    const shot = async (name) =>
+      panel.screenshot({
+        path: `test-results/design-${name}-${colorScheme}.png`,
+        animations: 'disabled',
+      });
+    await accessible(panel, 'collection');
+    await shot('collection');
+    await panel.locator('#toolsMenu summary').click();
+    await accessible(panel, 'backup menu');
+    await shot('menu');
+    await panel.keyboard.press('Escape');
+    await panel.locator('.word-open').first().click();
+    await accessible(panel, 'detail');
+    await shot('detail');
+    await panel.locator('#deleteBtn').click();
+    await accessible(panel, 'delete confirmation');
+    await shot('delete');
+    await panel.keyboard.press('Escape');
+    await panel.locator('#backBtn').click();
+    await expect(panel.locator('.word-open').first()).toBeFocused();
+    await panel.locator('#reviewModeBtn').click();
+    await accessible(panel, 'review front');
+    await shot('review');
+    await panel.keyboard.press('Space');
+    await expect(panel.locator('#flashcard')).toHaveClass(/flipped/);
+    await accessible(panel, 'review answer');
+    await shot('answer');
+    for (let i = 0; i < 5; i++) await panel.locator('#btnKnow').click();
+    await expect(panel.locator('#reviewSummary')).toBeVisible();
+    await accessible(panel, 'review summary');
+    await shot('summary');
+    await panel.locator('#statsViewBtn').click();
+    await accessible(panel, 'statistics');
+    await shot('stats');
+    for (const width of [320, 600]) {
+      await panel.setViewportSize({ width, height: 700 });
+      expect(await panel.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    }
+    const popup = await extensionPage('popup');
+    await popup.setViewportSize({ width: 360, height: 590 });
+    await popup.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await expect(popup.locator('.word-item')).toHaveCount(6);
+    await accessible(popup, 'popup');
+    await popup.screenshot({ path: `test-results/design-popup-${colorScheme}.png` });
+    const options = await extensionPage('options');
+    await options.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await options.setViewportSize({ width: 1280, height: 960 });
+    await expect(options.locator('#saveBtn')).toBeEnabled();
+    await accessible(options, 'settings desktop');
+    await options.screenshot({
+      path: `test-results/design-settings-${colorScheme}.png`,
+      fullPage: true,
+    });
+    await options.setViewportSize({ width: 375, height: 812 });
+    expect(await options.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await accessible(options, 'settings narrow');
+    await options.screenshot({ path: `test-results/design-settings-narrow-${colorScheme}.png` });
+    const page = await readingPage();
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await select(page);
+    await page.keyboard.press('s');
+    await expect(page.locator('wordvoice-popup .translation')).toBeVisible();
+    const result = await new AxeBuilder({ page })
+      .include('wordvoice-popup')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(result.violations).toEqual([]);
+    await page
+      .locator('wordvoice-popup')
+      .screenshot({ path: `test-results/design-selection-${colorScheme}.png` });
+  });
+}
+
+test('empty views, clear search, keyboard review and modal focus work', async () => {
+  const panel = await extensionPage('sidepanel');
+  await panel.setViewportSize({ width: 320, height: 640 });
+  await expect(panel.locator('.empty-title')).toContainText('你的词汇');
+  await panel.screenshot({ path: 'test-results/design-empty.png' });
+  await panel.locator('#reviewModeBtn').click();
+  await expect(panel.locator('#reviewEmpty')).toBeVisible();
+  await accessible(panel, 'empty review');
+  await panel.locator('#libraryViewBtn').click();
+  await seed([{ word: 'hello', translation: '你好' }]);
+  await panel.reload();
+  await expect(panel.locator('.word-card')).toHaveCount(1);
+  await panel.locator('#searchInput').fill('missing');
+  await expect(panel.locator('.empty-title')).toHaveText('没有匹配的记录');
+  await panel.locator('#clearSearch').click();
+  await expect(panel.locator('.word-card')).toHaveCount(1);
+  await expect(panel.locator('#searchInput')).toBeFocused();
+  await panel.keyboard.press('Tab');
+  await panel.keyboard.press('Tab');
+  await panel.locator('.word-open').focus();
+  await panel.keyboard.press('Enter');
+  await expect(panel.locator('#backBtn')).toBeFocused();
+  await panel.keyboard.press('Shift+Tab');
+  await expect(panel.locator('#deleteBtn')).toBeFocused();
+  await panel.keyboard.press('Escape');
+  await expect(panel.locator('.word-open')).toBeFocused();
+  await panel.locator('#reviewModeBtn').click();
+  await panel.keyboard.press('Space');
+  await expect(panel.locator('#flashcard')).toHaveClass(/flipped/);
+  await panel.keyboard.press('1');
+  await expect(panel.locator('#reviewSummary')).toBeVisible();
+  expect(await panel.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('settings navigation, unsaved state and provider disclosure stay coherent', async () => {
+  const options = await extensionPage('options');
+  await expect(options.locator('#saveBtn')).toBeEnabled();
+  await options.locator('#ttsProvider').selectOption('minimax');
+  await expect(options.locator('.credential-section[data-provider="minimax"]')).toHaveAttribute(
+    'open',
+    '',
+  );
+  await expect(options.locator('#saveStatus')).toContainText('未保存');
+  await options.locator('.settings-sidebar a[href="#services"]').click();
+  await expect(options.locator('.settings-sidebar nav .active')).toHaveAttribute(
+    'href',
+    '#services',
+  );
+  await options.locator('#saveBtn').click();
+  await expect(options.locator('#saveStatus')).toHaveText('已保存');
+  await options.locator('.settings-sidebar a[href="#help"]').click();
+  await expect(options.locator('#openShortcuts')).toBeInViewport();
+  await options.locator('.settings-sidebar a[href="#reading"]').last().click();
+  await options.locator('#ttsProvider').selectOption('chrome-tts');
+  await options.locator('#testTts').click();
+  await expect(options.locator('.voice-preview #testLog')).toContainText('成功');
+  await options.locator('#testTranslation').click();
+  await expect(options.locator('.test-area #testLog')).toContainText('成功');
+  await options.locator('#saveBtn').click();
+});
+
+test('long text fits the collection and detail; keyboard focus holds the selection card open', async () => {
+  const long = 'Extraordinarily'.repeat(100);
+  await seed([{ word: long, translation: '长文本测试' }]);
+  const panel = await extensionPage('sidepanel');
+  await panel.setViewportSize({ width: 320, height: 640 });
+  await expect(panel.locator('.word-card')).toHaveCount(1);
+  expect((await panel.locator('.word-card').boundingBox()).height).toBeLessThan(200);
+  await panel.locator('.word-open').click();
+  expect((await panel.locator('.detail-header').boundingBox()).height).toBeLessThan(240);
+  expect(await panel.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(panel.locator('#detailTranslation')).toBeInViewport();
+  const page = await readingPage();
+  await page.clock.install();
+  await page.locator('#first').evaluate((el, text) => {
+    el.textContent = text;
+  }, long);
+  await select(page);
+  await page.keyboard.press('s');
+  await expect(page.locator('wordvoice-popup .translation')).toBeVisible();
+  await page.locator('wordvoice-popup .replay').focus();
+  await page.clock.fastForward(13000);
+  await expect(page.locator('wordvoice-popup')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('wordvoice-popup')).toHaveCount(0);
 });
 
 test('S wakes a stopped service worker and retains data and settings', async () => {
