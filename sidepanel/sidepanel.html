@@ -1,313 +1,377 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WordVoice 单词本</title>
-  <link rel="stylesheet" href="sidepanel.css">
-</head>
-<body>
-  <div class="panel-container">
-    <!-- 头部 -->
-    <header class="header">
-      <h1 class="logo" id="headerTitle">单词本</h1>
-      <div class="header-actions">
-        <button id="statsViewBtn" class="btn-icon" title="学习统计">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 20V10"></path>
-            <path d="M12 20V4"></path>
-            <path d="M6 20v-6"></path>
-          </svg>
-        </button>
-        <button id="reviewModeBtn" class="btn-icon" title="复习模式">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-          </svg>
-        </button>
-        <button id="importBtn" class="btn-icon" title="导入数据">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-        </button>
-        <button id="exportBtn" class="btn-icon" title="导出数据">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-        </button>
-        <button id="settingsBtn" class="btn-icon" title="设置">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </button>
-        <input type="file" id="importFile" accept=".json" style="display: none;">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WordVoice 单词本</title>
+    <link rel="stylesheet" href="../lib/ui.css" />
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div class="panel-container">
+      <header class="header">
+        <div class="brand">
+          <span class="brand-mark" data-icon="wave"></span><span class="brand-name">WordVoice</span>
+        </div>
+        <div class="header-actions">
+          <button id="stopSpeech" class="btn-icon" title="停止朗读" data-icon="stop"></button>
+          <button id="settingsBtn" class="btn-icon" title="设置" data-icon="settings"></button>
+          <details class="tools-menu" id="toolsMenu">
+            <summary aria-label="数据管理" title="数据管理"><span data-icon="more"></span></summary>
+            <div class="tools-popover">
+              <button id="importBtn"><span data-icon="upload"></span>导入备份</button
+              ><button id="exportBtn"><span data-icon="download"></span>导出备份</button>
+            </div>
+          </details>
+          <input type="file" id="importFile" accept=".json" hidden />
+        </div>
+      </header>
+      <div class="page-heading">
+        <h1 id="headerTitle">单词本</h1>
       </div>
-    </header>
+      <!-- 单词本视图 -->
+      <div id="wordListView" class="view-container">
+        <!-- 时间筛选标签 -->
+        <div class="filter-tabs" aria-label="筛选记录">
+          <button class="filter-tab active" data-filter="all">全部</button>
+          <button class="filter-tab" data-filter="today">今日</button>
+          <button class="filter-tab" data-filter="week">本周</button>
+          <button class="filter-tab" data-filter="new">生词</button
+          ><button class="filter-tab" data-filter="learning">学习中</button
+          ><button class="filter-tab" data-filter="mastered">已掌握</button>
+        </div>
 
-    <!-- 单词本视图 -->
-    <div id="wordListView" class="view-container">
-      <!-- 时间筛选标签 -->
-      <div class="filter-tabs">
-        <button class="filter-tab active" data-filter="all">全部</button>
-        <button class="filter-tab" data-filter="today">今日</button>
-        <button class="filter-tab" data-filter="week">本周</button>
-        <button class="filter-tab" data-filter="new">生词</button>
-      </div>
+        <!-- 搜索栏 -->
+        <div class="search-bar">
+          <svg
+            class="search-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="搜索原文或翻译"
+            aria-label="搜索单词"
+          /><button
+            id="clearSearch"
+            class="clear-search"
+            aria-label="清空搜索"
+            data-icon="close"
+            hidden
+          ></button>
+        </div>
 
-      <!-- 搜索栏 -->
-      <div class="search-bar">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"></circle>
-          <path d="m21 21-4.3-4.3"></path>
-        </svg>
-        <input type="text" id="searchInput" placeholder="搜索单词..." />
-      </div>
+        <!-- 统计信息 -->
+        <div class="stats-bar">
+          <span id="statsText">共 0 个单词</span>
+          <div class="stats-bar-controls">
+            <select id="typeFilter" aria-label="文本类型">
+              <option value="words-phrases">单词+短语</option>
+              <option value="word">仅单词</option>
+              <option value="phrase">仅短语</option>
+              <option value="sentence">仅句子</option>
+              <option value="all">全部类型</option>
+            </select>
+            <select id="sortSelect" aria-label="排序方式">
+              <option value="lastAccessedAt">最近访问</option>
+              <option value="frequency">查询次数</option>
+              <option value="createdAt">添加时间</option>
+              <option value="word">字母顺序</option>
+            </select>
+          </div>
+        </div>
 
-      <!-- 统计信息 -->
-      <div class="stats-bar">
-        <span id="statsText">共 0 个单词</span>
-        <div class="stats-bar-controls">
-          <select id="typeFilter">
-            <option value="words-phrases">单词+短语</option>
-            <option value="word">仅单词</option>
-            <option value="phrase">仅短语</option>
-            <option value="sentence">仅句子</option>
-            <option value="all">全部类型</option>
-          </select>
-          <select id="sortSelect">
-            <option value="lastAccessedAt">最近访问</option>
-            <option value="frequency">查询次数</option>
-            <option value="createdAt">添加时间</option>
-            <option value="word">字母顺序</option>
-          </select>
+        <!-- 单词列表 -->
+        <div class="word-list" id="wordList">
+          <div class="word-list-empty">正在加载…</div>
         </div>
       </div>
 
-      <!-- 单词列表 -->
-      <div class="word-list" id="wordList">
-        <div class="word-list-empty">暂无单词记录</div>
-      </div>
-    </div>
+      <!-- 复习视图 -->
+      <div id="reviewView" class="view-container" style="display: none">
+        <div id="reviewEmpty" hidden></div>
+        <!-- 复习进度 -->
+        <div class="review-progress">
+          <button id="backToListBtn" class="btn-back-review" aria-label="返回单词本">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="m15 18-6-6 6-6"></path>
+            </svg>
+          </button>
+          <span class="review-caption">本轮复习</span
+          ><span id="reviewProgressText" aria-live="polite">0/0</span>
+        </div>
 
-    <!-- 复习视图 -->
-    <div id="reviewView" class="view-container" style="display: none;">
-      <!-- 复习进度 -->
-      <div class="review-progress">
-        <button id="backToListBtn" class="btn-back-review">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="m15 18-6-6 6-6"></path>
-          </svg>
-        </button>
-        <span id="reviewProgressText">0/0</span>
-      </div>
-
-      <!-- 闪卡容器 -->
-      <div class="flashcard-container" id="flashcardContainer">
-        <div class="flashcard" id="flashcard">
-          <div class="flashcard-inner">
-            <!-- 正面：单词 -->
-            <div class="flashcard-front">
-              <div class="flashcard-word" id="cardWord">Loading...</div>
-              <div class="flashcard-hint">点击翻转查看释义</div>
+        <!-- 闪卡容器 -->
+        <div class="flashcard-container" id="flashcardContainer">
+          <div class="flashcard" id="flashcard">
+            <div class="flashcard-inner">
+              <!-- 正面：单词 -->
+              <button
+                class="flashcard-front"
+                id="cardFlipBtn"
+                aria-label="显示释义"
+                aria-describedby="cardWord"
+                aria-expanded="false"
+              >
+                <span class="flashcard-word" id="cardWord">准备中…</span>
+                <span class="flashcard-hint">点击卡片或按空格，查看释义</span>
+              </button>
+              <!-- 背面：单词 + 音标 + 释义 -->
+              <div class="flashcard-back">
+                <div class="flashcard-back-word" id="cardBackWord" tabindex="0"></div>
+                <div class="flashcard-phonetic" id="cardPhonetic"></div>
+                <div class="flashcard-definitions" id="cardDefinitions"></div>
+                <button id="flipBackBtn" class="flip-back">返回词面</button>
+                <button class="btn-play-card" id="cardPlayBtn" aria-label="朗读复习词条">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <!-- 背面：单词 + 音标 + 释义 -->
-            <div class="flashcard-back">
-              <div class="flashcard-back-word" id="cardBackWord"></div>
-              <div class="flashcard-phonetic" id="cardPhonetic"></div>
-              <div class="flashcard-definitions" id="cardDefinitions"></div>
-              <button class="btn-play-card" id="cardPlayBtn">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7z"></path>
+          </div>
+        </div>
+
+        <!-- 掌握度按钮 -->
+        <div class="mastery-buttons">
+          <button class="btn-mastery btn-mastery-know" id="btnKnow">
+            <kbd>1</kbd>
+            <span class="btn-mastery-text">认识</span>
+          </button>
+          <button class="btn-mastery btn-mastery-learning" id="btnLearning">
+            <kbd>2</kbd>
+            <span class="btn-mastery-text">模糊</span>
+          </button>
+          <button class="btn-mastery btn-mastery-unknown" id="btnUnknown">
+            <kbd>3</kbd>
+            <span class="btn-mastery-text">不认识</span>
+          </button>
+        </div>
+
+        <!-- 复习结束统计面板 -->
+        <div class="review-summary" id="reviewSummary" style="display: none">
+          <h2 class="summary-title" tabindex="-1">复习完成</h2>
+          <div class="summary-stats">
+            <div class="summary-stat">
+              <span class="summary-number" id="summaryKnow">0</span>
+              <span class="summary-label">认识</span>
+            </div>
+            <div class="summary-stat">
+              <span class="summary-number" id="summaryLearning">0</span>
+              <span class="summary-label">模糊</span>
+            </div>
+            <div class="summary-stat">
+              <span class="summary-number" id="summaryUnknown">0</span>
+              <span class="summary-label">不认识</span>
+            </div>
+          </div>
+          <button class="btn-restart-review" id="btnRestartReview">再来一轮</button>
+        </div>
+      </div>
+
+      <!-- 统计视图 -->
+      <div id="statsView" class="view-container" style="display: none">
+        <div class="stats-view-header">
+          <button id="backFromStatsBtn" class="btn-back-review" aria-label="返回单词本">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="m15 18-6-6 6-6"></path>
+            </svg>
+          </button>
+          <span class="stats-view-title">返回单词本</span>
+        </div>
+
+        <!-- 概览卡片（可点击跳转筛选） -->
+        <div class="stats-overview" id="statsOverview">
+          <div class="overview-card clickable-stat" data-filter="all">
+            <span class="overview-number" id="overviewTotal">0</span>
+            <span class="overview-label">总词汇</span>
+          </div>
+          <div class="overview-card clickable-stat" data-filter="today">
+            <span class="overview-number" id="overviewToday">0</span>
+            <span class="overview-label">今日新增</span>
+          </div>
+          <div class="overview-card clickable-stat" data-filter="week">
+            <span class="overview-number" id="overviewWeek">0</span>
+            <span class="overview-label">本周新增</span>
+          </div>
+        </div>
+
+        <!-- 掌握度分布 -->
+        <div class="stats-section">
+          <h3 class="stats-section-title">掌握度分布</h3>
+          <div class="mastery-chart" id="masteryChart" role="group" aria-label="掌握度分布">
+            <div class="mastery-ring-container">
+              <svg class="mastery-ring" viewBox="0 0 120 120">
+                <circle class="ring-bg" cx="60" cy="60" r="50" />
+                <circle class="ring-mastered" id="ringMastered" cx="60" cy="60" r="50" />
+                <circle class="ring-learning" id="ringLearning" cx="60" cy="60" r="50" />
+                <circle class="ring-new" id="ringNew" cx="60" cy="60" r="50" />
+              </svg>
+              <div class="ring-center-label" id="ringCenterLabel">0</div>
+            </div>
+            <div class="mastery-legend">
+              <div class="legend-item clickable-stat" data-filter="mastered">
+                <span class="legend-dot legend-dot-mastered"></span>
+                <span class="legend-text">已掌握</span>
+                <span class="legend-count" id="legendMastered">0</span>
+              </div>
+              <div class="legend-item clickable-stat" data-filter="learning">
+                <span class="legend-dot legend-dot-learning"></span>
+                <span class="legend-text">学习中</span>
+                <span class="legend-count" id="legendLearning">0</span>
+              </div>
+              <div class="legend-item clickable-stat" data-filter="new">
+                <span class="legend-dot legend-dot-new"></span>
+                <span class="legend-text">新单词</span>
+                <span class="legend-count" id="legendNew">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 每日新增趋势 -->
+        <div class="stats-section">
+          <h3 class="stats-section-title">最近 14 天</h3>
+          <div class="daily-chart" id="dailyChart">
+            <!-- JS 动态生成柱状图 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 单词详情面板 -->
+      <div
+        class="word-detail"
+        id="wordDetail"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detailWord"
+        style="display: none"
+      >
+        <div class="detail-header">
+          <button class="btn-back" id="backBtn" aria-label="返回单词本">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="m15 18-6-6 6-6"></path>
+            </svg>
+          </button>
+          <div class="detail-word">
+            <span class="detail-word-text" id="detailWord" tabindex="0"></span>
+            <span class="detail-phonetic" id="detailPhonetic"></span>
+          </div>
+          <button class="btn-play-large" id="detailPlayBtn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="detail-content">
+          <!-- 释义 -->
+          <div class="detail-section">
+            <h3 class="section-title">释义</h3>
+            <p id="detailTranslation" class="word-translation"></p>
+            <button id="refreshTranslation">查询翻译</button>
+            <div class="definitions" id="detailDefinitions"></div>
+          </div>
+
+          <!-- 统计 -->
+          <div class="detail-section">
+            <h3 class="section-title">学习记录</h3>
+            <div class="detail-stats">
+              <div class="stat-card">
+                <span class="stat-number" id="detailFrequency">0</span>
+                <span class="stat-desc">查询次数</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-number" id="detailFirstSeen">-</span>
+                <span class="stat-desc">首次记录</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI 例句 -->
+          <div class="detail-section">
+            <div class="section-title-row">
+              <h3 class="section-title">AI 例句</h3>
+              <button class="btn-generate" id="generateSentencesBtn" title="生成 AI 例句">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M12 3v3m6.36-.64l-2.12 2.12M21 12h-3m.64 6.36l-2.12-2.12M12 21v-3m-6.36.64l2.12-2.12M3 12h3m-.64-6.36l2.12 2.12"
+                  ></path>
                 </svg>
+                <span>生成</span>
               </button>
             </div>
+            <div class="ai-sentences" id="detailAiSentences">
+              <div class="ai-sentences-empty">点击「生成」按钮获取 AI 例句</div>
+            </div>
+          </div>
+
+          <!-- 上下文 -->
+          <div class="detail-section">
+            <h3 class="section-title">来源与上下文</h3>
+            <div class="contexts" id="detailContexts"></div>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="detail-actions">
+            <button class="btn-danger" id="deleteBtn">删除记录</button>
           </div>
         </div>
       </div>
-
-      <!-- 掌握度按钮 -->
-      <div class="mastery-buttons">
-        <button class="btn-mastery btn-mastery-know" id="btnKnow">
-          <span class="btn-mastery-emoji">✓</span>
-          <span class="btn-mastery-text">认识</span>
-        </button>
-        <button class="btn-mastery btn-mastery-learning" id="btnLearning">
-          <span class="btn-mastery-emoji">~</span>
-          <span class="btn-mastery-text">模糊</span>
-        </button>
-        <button class="btn-mastery btn-mastery-unknown" id="btnUnknown">
-          <span class="btn-mastery-emoji">✗</span>
-          <span class="btn-mastery-text">不认识</span>
-        </button>
-      </div>
-
-      <!-- 复习结束统计面板 -->
-      <div class="review-summary" id="reviewSummary" style="display: none;">
-        <div class="summary-icon">🎉</div>
-        <h2 class="summary-title">复习完成！</h2>
-        <div class="summary-stats">
-          <div class="summary-stat">
-            <span class="summary-number" id="summaryKnow">0</span>
-            <span class="summary-label">认识</span>
+      <nav class="bottom-nav" aria-label="主要功能">
+        <button id="libraryViewBtn" class="active" aria-current="page">
+          <span data-icon="book"></span>单词本</button
+        ><button id="reviewModeBtn"><span data-icon="cards"></span>复习</button
+        ><button id="statsViewBtn"><span data-icon="chart"></span>统计</button>
+      </nav>
+      <dialog id="deleteDialog" aria-labelledby="deleteTitle">
+        <form method="dialog">
+          <h2 id="deleteTitle">删除这条记录？</h2>
+          <p id="deleteDescription"></p>
+          <div class="dialog-actions">
+            <button value="cancel" autofocus>保留记录</button
+            ><button id="confirmDelete" value="delete" class="danger-btn">删除记录</button>
           </div>
-          <div class="summary-stat">
-            <span class="summary-number" id="summaryLearning">0</span>
-            <span class="summary-label">模糊</span>
-          </div>
-          <div class="summary-stat">
-            <span class="summary-number" id="summaryUnknown">0</span>
-            <span class="summary-label">不认识</span>
-          </div>
-        </div>
-        <button class="btn-restart-review" id="btnRestartReview">再来一轮</button>
-      </div>
+        </form>
+      </dialog>
     </div>
 
-    <!-- 统计视图 -->
-    <div id="statsView" class="view-container" style="display: none;">
-      <div class="stats-view-header">
-        <button id="backFromStatsBtn" class="btn-back-review">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="m15 18-6-6 6-6"></path>
-          </svg>
-        </button>
-        <span class="stats-view-title">学习统计</span>
-      </div>
-
-      <!-- 概览卡片（可点击跳转筛选） -->
-      <div class="stats-overview" id="statsOverview">
-        <div class="overview-card clickable-stat" data-filter="all">
-          <span class="overview-number" id="overviewTotal">0</span>
-          <span class="overview-label">总词汇</span>
-        </div>
-        <div class="overview-card clickable-stat" data-filter="today">
-          <span class="overview-number" id="overviewToday">0</span>
-          <span class="overview-label">今日新增</span>
-        </div>
-        <div class="overview-card clickable-stat" data-filter="week">
-          <span class="overview-number" id="overviewWeek">0</span>
-          <span class="overview-label">本周新增</span>
-        </div>
-      </div>
-
-      <!-- 掌握度分布 -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">掌握度分布</h3>
-        <div class="mastery-chart" id="masteryChart">
-          <div class="mastery-ring-container">
-            <svg class="mastery-ring" viewBox="0 0 120 120">
-              <circle class="ring-bg" cx="60" cy="60" r="50" />
-              <circle class="ring-mastered" id="ringMastered" cx="60" cy="60" r="50" />
-              <circle class="ring-learning" id="ringLearning" cx="60" cy="60" r="50" />
-              <circle class="ring-new" id="ringNew" cx="60" cy="60" r="50" />
-            </svg>
-            <div class="ring-center-label" id="ringCenterLabel">0</div>
-          </div>
-          <div class="mastery-legend">
-            <div class="legend-item clickable-stat" data-filter="mastered">
-              <span class="legend-dot legend-dot-mastered"></span>
-              <span class="legend-text">已掌握</span>
-              <span class="legend-count" id="legendMastered">0</span>
-            </div>
-            <div class="legend-item clickable-stat" data-filter="learning">
-              <span class="legend-dot legend-dot-learning"></span>
-              <span class="legend-text">学习中</span>
-              <span class="legend-count" id="legendLearning">0</span>
-            </div>
-            <div class="legend-item clickable-stat" data-filter="new">
-              <span class="legend-dot legend-dot-new"></span>
-              <span class="legend-text">新单词</span>
-              <span class="legend-count" id="legendNew">0</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 每日新增趋势 -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">每日新增趋势（14天）</h3>
-        <div class="daily-chart" id="dailyChart">
-          <!-- JS 动态生成柱状图 -->
-        </div>
-      </div>
-    </div>
-
-    <!-- 单词详情面板 -->
-    <div class="word-detail" id="wordDetail" style="display: none;">
-      <div class="detail-header">
-        <button class="btn-back" id="backBtn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="m15 18-6-6 6-6"></path>
-          </svg>
-        </button>
-        <div class="detail-word">
-          <span class="detail-word-text" id="detailWord"></span>
-          <span class="detail-phonetic" id="detailPhonetic"></span>
-        </div>
-        <button class="btn-play-large" id="detailPlayBtn">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z"></path>
-          </svg>
-        </button>
-      </div>
-
-      <div class="detail-content">
-        <!-- 释义 -->
-        <div class="detail-section">
-          <h3 class="section-title">释义</h3>
-          <div class="definitions" id="detailDefinitions"></div>
-        </div>
-
-        <!-- 统计 -->
-        <div class="detail-section">
-          <h3 class="section-title">学习记录</h3>
-          <div class="detail-stats">
-            <div class="stat-card">
-              <span class="stat-number" id="detailFrequency">0</span>
-              <span class="stat-desc">查询次数</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="detailFirstSeen">-</span>
-              <span class="stat-desc">首次记录</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI 例句 -->
-        <div class="detail-section">
-          <div class="section-title-row">
-            <h3 class="section-title">AI 例句</h3>
-            <button class="btn-generate" id="generateSentencesBtn" title="生成 AI 例句">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 3v3m6.36-.64l-2.12 2.12M21 12h-3m.64 6.36l-2.12-2.12M12 21v-3m-6.36.64l2.12-2.12M3 12h3m-.64-6.36l2.12 2.12"></path>
-              </svg>
-              <span>生成</span>
-            </button>
-          </div>
-          <div class="ai-sentences" id="detailAiSentences">
-            <div class="ai-sentences-empty">点击「生成」按钮获取 AI 例句</div>
-          </div>
-        </div>
-
-        <!-- 上下文 -->
-        <div class="detail-section">
-          <h3 class="section-title">出现场景</h3>
-          <div class="contexts" id="detailContexts"></div>
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="detail-actions">
-          <button class="btn-danger" id="deleteBtn">删除单词</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="sidepanel.js" type="module"></script>
-</body>
+    <script src="sidepanel.js" type="module"></script>
+  </body>
 </html>

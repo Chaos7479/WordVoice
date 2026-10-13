@@ -1,489 +1,322 @@
-// WordVoice 设置页面
-
-import { getSettings, saveSettings, PROVIDER_LIST, TRANSLATION_PROVIDER_LIST, AI_PROVIDER_LIST, LANGUAGES } from '../lib/settings.js';
+import {
+  getSettings,
+  saveSettings,
+  DEFAULTS,
+  LANGUAGES,
+  PROVIDER_LIST,
+  TRANSLATION_PROVIDER_LIST,
+  AI_PROVIDER_LIST,
+} from '../lib/settings.js';
+import { send, escapeHtml as esc, showStatus } from '../lib/ui.js';
 import db from '../lib/db.js';
-
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-
-// 渲染语言下拉框
-function renderLanguageSelectors(sourceLang, targetLang) {
-  const sourceEl = $('#sourceLanguage');
-  const targetEl = $('#targetLanguage');
-
-  const buildOptions = (selected) => LANGUAGES.map(lang =>
-    `<option value="${lang.code}" ${lang.code === selected ? 'selected' : ''}>${lang.nameZh} (${lang.name})</option>`
-  ).join('');
-
-  sourceEl.innerHTML = buildOptions(sourceLang);
-  targetEl.innerHTML = buildOptions(targetLang);
-}
-
-// 渲染翻译服务商卡片
-function renderTranslationProviderCards(currentProvider) {
-  const container = $('#translationProviderCards');
-  container.innerHTML = TRANSLATION_PROVIDER_LIST.map(provider => `
-    <div class="provider-card ${currentProvider === provider.id ? 'active' : ''}" data-provider="${provider.id}">
-      <div class="card-header">
-        <h3>${provider.name}</h3>
-        ${!provider.needsKey ? '<span class="badge free">免费</span>' : ''}
-      </div>
-      <div class="card-check">
-        ${currentProvider === provider.id ? '✓' : ''}
-      </div>
-    </div>
-  `).join('');
-
-  // 卡片点击切换
-  $$('#translationProviderCards .provider-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const providerId = card.dataset.provider;
-      $$('#translationProviderCards .provider-card').forEach(c => c.classList.remove('active'));
-      card.classList.add('active');
-      showTranslationProviderConfig(providerId);
-    });
-  });
-
-  showTranslationProviderConfig(currentProvider);
-}
-
-// 渲染 TTS 服务商卡片
-function renderTtsProviderCards(currentProvider) {
-  const container = $('#ttsProviderCards');
-  container.innerHTML = PROVIDER_LIST.map(provider => `
-    <div class="provider-card ${currentProvider === provider.id ? 'active' : ''}" data-provider="${provider.id}">
-      <div class="card-header">
-        <h3>${provider.name}</h3>
-      </div>
-      <div class="card-check">
-        ${currentProvider === provider.id ? '✓' : ''}
-      </div>
-    </div>
-  `).join('');
-
-  // 卡片点击切换 + 自动测试
-  $$('#ttsProviderCards .provider-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const providerId = card.dataset.provider;
-      $$('#ttsProviderCards .provider-card').forEach(c => c.classList.remove('active'));
-      card.classList.add('active');
-      showTtsProviderConfig(providerId);
-      autoTestTtsProvider(providerId);
-    });
-  });
-
-  showTtsProviderConfig(currentProvider);
-}
-
-// 渲染 AI 服务商卡片
-function renderAiProviderCards(currentProvider) {
-  const container = $('#aiProviderCards');
-  container.innerHTML = AI_PROVIDER_LIST.map(provider => `
-    <div class="provider-card ${currentProvider === provider.id ? 'active' : ''}" data-provider="${provider.id}">
-      <div class="card-header">
-        <h3>${provider.name}</h3>
-      </div>
-      <div class="card-check">
-        ${currentProvider === provider.id ? '✓' : ''}
-      </div>
-    </div>
-  `).join('');
-
-  // 卡片点击切换
-  $$('#aiProviderCards .provider-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const providerId = card.dataset.provider;
-      $$('#aiProviderCards .provider-card').forEach(c => c.classList.remove('active'));
-      card.classList.add('active');
-      card.querySelector('.card-check').textContent = '✓';
-      // 清除其他卡片的勾选
-      $$('#aiProviderCards .provider-card:not(.active) .card-check').forEach(c => c.textContent = '');
-      showAiProviderConfig(providerId);
-    });
-  });
-
-  showAiProviderConfig(currentProvider);
-}
-
-function showAiProviderConfig(providerId) {
-  $$('[id^="config-ai-"]').forEach(el => el.style.display = 'none');
-  const configEl = $(`#config-ai-${providerId}`);
-  if (configEl) configEl.style.display = 'block';
-}
-
-function showTranslationProviderConfig(providerId) {
-  $$('[id^="config-translation-"]').forEach(el => el.style.display = 'none');
-  const configEl = $(`#config-translation-${providerId}`);
-  if (configEl) configEl.style.display = 'block';
-}
-
-function showTtsProviderConfig(providerId) {
-  $$('[id^="config-"]:not([id^="config-translation-"]):not([id^="config-ai-"])')
-    .forEach(el => el.classList.remove('active'));
-  const configEl = $(`#config-${providerId}`);
-  if (configEl) configEl.classList.add('active');
-}
-
-async function loadSettings() {
-  const settings = await getSettings();
-
-  // 口音
-  const radioEl = $(`input[name="pronunciation"][value="${settings.pronunciation}"]`);
-  if (radioEl) radioEl.checked = true;
-
-  // 翻译
-  $('#showTranslation').checked = settings.showTranslation;
-
-  // 语言设置
-  renderLanguageSelectors(settings.sourceLanguage || 'en', settings.targetLanguage || 'zh-CN');
-
-  // 渲染翻译服务商卡片
-  renderTranslationProviderCards(settings.translationProvider);
-
-  // 渲染 AI 服务商卡片
-  renderAiProviderCards(settings.aiProvider || 'qwen');
-
-  // 渲染 TTS 服务商卡片
-  renderTtsProviderCards(settings.ttsProvider);
-
-  // AI 例句服务 Key（与翻译/TTS 共享 providers 数据）
-  $('#ai-qwen-apiKey').value = settings.providers.qwen?.apiKey || '';
-  $('#ai-doubao-accessToken').value = settings.providers.doubao?.accessToken || '';
-  $('#ai-minimax-apiKey').value = settings.providers.minimax?.apiKey || '';
-
-  // Qwen
-  $('#qwen-apiKey').value = settings.providers.qwen?.apiKey || '';
-
-  // 豆包
-  $('#doubao-appId').value = settings.providers.doubao.appId || '';
-  $('#doubao-accessToken').value = settings.providers.doubao.accessToken || '';
-  $('#doubao-voiceType').value = settings.providers.doubao.voiceType || 'BV056_streaming';
-
-  // DashScope
-  $('#dashscope-apiKey').value = settings.providers.dashscope.apiKey || '';
-  $('#dashscope-model').value = settings.providers.dashscope.model || 'qwen3-tts-flash';
-  $('#dashscope-voice').value = settings.providers.dashscope.voice || 'Ethan';
-
-  // MiniMax
-  $('#minimax-groupId').value = settings.providers.minimax.groupId || '';
-  $('#minimax-apiKey').value = settings.providers.minimax.apiKey || '';
-  $('#minimax-voiceId').value = settings.providers.minimax.voiceId || 'English_expressive_narrator_v2';
-}
-
-function collectSettings() {
-  const activeTranslationCard = $('#translationProviderCards .provider-card.active');
-  const activeTtsCard = $('#ttsProviderCards .provider-card.active');
-  const activeAiCard = $('#aiProviderCards .provider-card.active');
-
-  // AI 区域填写的 Key 值（用户可能在 AI 区域填了 key，需要同步到 providers）
-  const aiQwenKey = $('#ai-qwen-apiKey').value.trim();
-  const aiDoubaoToken = $('#ai-doubao-accessToken').value.trim();
-  const aiMinimaxKey = $('#ai-minimax-apiKey').value.trim();
-
-  // 翻译/TTS 区域填写的值
-  const ttsQwenKey = $('#qwen-apiKey').value.trim();
-  const ttsDoubaoToken = $('#doubao-accessToken').value.trim();
-  const ttsMinimaxKey = $('#minimax-apiKey').value.trim();
-
-  return {
-    pronunciation: $('input[name="pronunciation"]:checked')?.value || 'us',
-    showTranslation: $('#showTranslation').checked,
-    sourceLanguage: $('#sourceLanguage').value || 'en',
-    targetLanguage: $('#targetLanguage').value || 'zh-CN',
-    translationProvider: activeTranslationCard?.dataset.provider || 'google',
-    aiProvider: activeAiCard?.dataset.provider || 'qwen',
-    ttsProvider: activeTtsCard?.dataset.provider || 'free-dict',
-    providers: {
-      qwen: {
-        apiKey: aiQwenKey || ttsQwenKey
-      },
-      doubao: {
-        appId: $('#doubao-appId').value.trim(),
-        accessToken: aiDoubaoToken || ttsDoubaoToken,
-        cluster: 'volcano_tts',
-        voiceType: $('#doubao-voiceType').value.trim() || 'BV056_streaming'
-      },
-      dashscope: {
-        apiKey: $('#dashscope-apiKey').value.trim(),
-        model: $('#dashscope-model').value || 'qwen3-tts-flash',
-        voice: $('#dashscope-voice').value || 'Ethan'
-      },
-      minimax: {
-        groupId: $('#minimax-groupId').value.trim(),
-        apiKey: aiMinimaxKey || ttsMinimaxKey,
-        model: 'speech-01-turbo',
-        voiceId: $('#minimax-voiceId').value.trim() || 'English_expressive_narrator_v2'
-      }
-    }
+import { compatibleVoices, selectBrowserVoice, isCharacterVoice } from '../lib/voices.js';
+const $ = (id) => document.getElementById(id);
+const fields = {
+  dashscope: {
+    title: '阿里云百炼 · 语音',
+    hint: '使用中国内地百炼 API Key。Qwen3-TTS 每次最多 600 个字符。更长文本自动使用浏览器语音。',
+    fields: [
+      ['apiKey', 'API Key', 'password'],
+      ['model', '语音模型', ['qwen3-tts-flash']],
+      ['voice', '音色', ['Ethan', 'Jennifer', 'Aiden', 'Cherry', 'Serena', 'Chelsie']],
+    ],
+  },
+  qwen: {
+    title: '通义千问 · 翻译和例句',
+    hint: '翻译和 AI 例句共用此配置。',
+    fields: [
+      ['apiKey', 'API Key', 'password'],
+      ['textModel', '文本模型名称', 'text'],
+    ],
+  },
+  doubao: {
+    title: '豆包 · 语音与方舟文本',
+    hint: '语音服务使用 App ID 和 Access Token。翻译和例句使用方舟 API Key 与已开通的模型 ID。',
+    fields: [
+      ['appId', '语音 App ID', 'text'],
+      ['accessToken', '语音 Access Token', 'password'],
+      ['voiceType', '语音音色 ID', 'text'],
+      ['apiKey', '方舟 API Key（翻译和例句）', 'password'],
+      ['textModel', '方舟模型名称或推理接入点 ID', 'text'],
+    ],
+  },
+  minimax: {
+    title: 'MiniMax · 语音、翻译和例句',
+    hint: '使用中国内地平台凭据。Group ID 按账户配置填写。',
+    fields: [
+      ['apiKey', 'API Key', 'password'],
+      ['groupId', 'Group ID（可选）', 'text'],
+      ['model', '语音模型名称', 'text'],
+      ['voiceId', '语音音色 ID', 'text'],
+      ['textModel', '文本模型名称', 'text'],
+    ],
+  },
+};
+let loadedSettings;
+let dirty = false;
+let browserVoices = [];
+function renderBrowserVoices(selected = $('browserVoice').value) {
+  const preferences = {
+    sourceLanguage: $('sourceLanguage').value,
+    pronunciation: $('pronunciation').value,
   };
+  const voices = compatibleVoices(browserVoices, preferences);
+  const automatic = selectBrowserVoice(browserVoices, preferences);
+  const select = $('browserVoice');
+  select.replaceChildren(
+    new Option(`自动选择${automatic ? ` · ${automatic.voiceName}` : '朗读音色'}`, ''),
+  );
+  for (const voice of voices)
+    select.add(
+      new Option(
+        `${voice.voiceName} · ${voice.lang} · ${voice.remote ? '联网' : '本地'}${isCharacterVoice(voice) ? ' · 特殊音效' : ''}`,
+        voice.voiceName,
+      ),
+    );
+  const missing = selected && !voices.some((voice) => voice.voiceName === selected);
+  if (missing) select.add(new Option(`${selected}（当前不可用）`, selected));
+  select.value = selected;
+  $('browserVoiceHint').textContent = missing
+    ? '已保存的音色当前不可用，朗读时自动选择。可重新选择并保存。'
+    : automatic
+      ? `自动模式优先使用普通朗读音色：${automatic.voiceName}。`
+      : '当前未找到普通朗读音色，将使用系统默认音色。可在系统语音设置中添加音色后刷新。';
 }
-
-function showSaveStatus(text) {
-  const el = $('#saveStatus');
-  el.textContent = text;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2000);
-}
-
-// 事件绑定
-$('#saveBtn').addEventListener('click', async () => {
-  const settings = collectSettings();
-  await saveSettings(settings);
-  showSaveStatus('已保存');
-});
-
-// 密码显示/隐藏切换
-$$('.toggle-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const input = $(`#${btn.dataset.target}`);
-    if (input.type === 'password') {
-      input.type = 'text';
-      btn.textContent = '隐藏';
-    } else {
-      input.type = 'password';
-      btn.textContent = '显示';
-    }
-  });
-});
-
-// 快捷键设置链接
-$('#openShortcuts').addEventListener('click', (e) => {
-  e.preventDefault();
-  chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
-});
-
-// ========== API 测试功能 ==========
-
-// 根据 provider 和 type 收集当前表单中的配置
-function getTestConfig(type, provider) {
-  if (type === 'translation') {
-    if (provider === 'google') return {};
-    if (provider === 'qwen') return { apiKey: $('#qwen-apiKey').value.trim() || $('#ai-qwen-apiKey').value.trim() };
-    if (provider === 'doubao') return { accessToken: $('#doubao-accessToken').value.trim() || $('#ai-doubao-accessToken').value.trim() };
-    if (provider === 'minimax') return { apiKey: $('#minimax-apiKey').value.trim() || $('#ai-minimax-apiKey').value.trim() };
-  }
-  if (type === 'ai') {
-    if (provider === 'qwen') return { apiKey: $('#ai-qwen-apiKey').value.trim() || $('#qwen-apiKey').value.trim() };
-    if (provider === 'doubao') return { accessToken: $('#ai-doubao-accessToken').value.trim() || $('#doubao-accessToken').value.trim() };
-    if (provider === 'minimax') return { apiKey: $('#ai-minimax-apiKey').value.trim() || $('#minimax-apiKey').value.trim() };
-  }
-  if (type === 'tts') {
-    if (provider === 'free-dict') return {};
-    if (provider === 'doubao') return {
-      appId: $('#doubao-appId').value.trim(),
-      accessToken: $('#doubao-accessToken').value.trim(),
-      cluster: 'volcano_tts',
-      voiceType: $('#doubao-voiceType').value.trim() || 'BV056_streaming'
-    };
-    if (provider === 'dashscope') return {
-      apiKey: $('#dashscope-apiKey').value.trim(),
-      model: $('#dashscope-model').value || 'qwen3-tts-flash',
-      voice: $('#dashscope-voice').value || 'Ethan'
-    };
-    if (provider === 'minimax') return {
-      groupId: $('#minimax-groupId').value.trim(),
-      apiKey: $('#minimax-apiKey').value.trim(),
-      model: 'speech-01-turbo',
-      voiceId: $('#minimax-voiceId').value.trim() || 'English_expressive_narrator_v2'
-    };
-  }
-  return {};
-}
-
-// 渲染日志到指定容器
-function renderTestLog(logEl, response, elapsedMs) {
-  logEl.classList.add('visible');
-  let html = '';
-
-  // 渲染每条日志行
-  if (response.logs) {
-    for (const entry of response.logs) {
-      const timeTag = `<span class="log-time">[${entry.time}ms]</span>`;
-      const levelClass = `log-${entry.level}`;
-      html += `<div class="log-line ${levelClass}">${timeTag}${escapeForHtml(entry.msg)}</div>`;
-      if (entry.data) {
-        html += `<div class="log-data">${escapeForHtml(JSON.stringify(entry.data))}</div>`;
-      }
-    }
-  }
-
-  // 最终结果
-  if (response.error) {
-    html += `<div class="log-line log-error">FAIL — ${escapeForHtml(response.error)}</div>`;
-  } else {
-    html += `<div class="log-line log-success">OK — 模型: ${escapeForHtml(response.model || '?')} | 耗时: ${elapsedMs}ms</div>`;
-    if (response.result) {
-      html += `<div class="log-data">结果: ${escapeForHtml(response.result)}</div>`;
-    }
-  }
-
-  logEl.innerHTML = html;
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-function escapeForHtml(str) {
-  if (typeof str !== 'string') str = String(str);
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-// 绑定所有测试按钮
-document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('.test-btn');
-  if (!btn) return;
-
-  const type = btn.dataset.testType;
-  const provider = btn.dataset.testProvider;
-  const logEl = $(`#log-${type}-${provider}`);
-
-  if (!logEl) return;
-
-  // 禁用按钮
-  const origText = btn.textContent;
-  btn.textContent = '测试中';
-  btn.classList.add('loading');
-  logEl.classList.add('visible');
-  logEl.innerHTML = '<div class="log-line log-info">正在发送测试请求...</div>';
-
-  const config = getTestConfig(type, provider);
-  const start = Date.now();
-
+async function refreshVoices(selected = $('browserVoice').value) {
+  $('refreshVoices').disabled = true;
   try {
-    const response = await chrome.runtime.sendMessage({
-      action: 'testApi',
+    const result = await send('getBrowserVoices');
+    if (result.error) throw new Error(result.error);
+    browserVoices = result.voices || [];
+    renderBrowserVoices(selected);
+  } catch (error) {
+    $('browserVoiceHint').textContent = `音色列表暂不可用：${error.message}`;
+  } finally {
+    $('refreshVoices').disabled = false;
+  }
+}
+$('refreshVoices').onclick = () => refreshVoices();
+for (const id of ['sourceLanguage', 'pronunciation'])
+  $(id).addEventListener('change', () => renderBrowserVoices(''));
+function renderFields(settings) {
+  $('providerFields').innerHTML = Object.entries(fields)
+    .map(
+      ([provider, spec]) =>
+        `<details class="credential-section" data-provider="${provider}" ${provider === settings.ttsProvider || provider === settings.translationProvider || provider === settings.aiProvider ? 'open' : ''}><summary>${spec.title}</summary><p class="hint">${spec.hint}</p>${spec.fields
+          .map(([key, label, type]) => {
+            const id = `${provider}-${key}`;
+            return `<div class="field"><label for="${id}">${label}</label>${
+              Array.isArray(type)
+                ? `<select id="${id}">${[...new Set([...type, settings.providers[provider][key]])]
+                    .filter(Boolean)
+                    .map((value) => `<option value="${esc(value)}">${esc(value)}</option>`)
+                    .join('')}</select>`
+                : `<div class="password-field"><input id="${id}" type="${type}" autocomplete="off" spellcheck="false" maxlength="4096">${type === 'password' ? `<button type="button" class="toggle-btn" data-target="${id}">显示</button>` : ''}</div>`
+            }</div>`;
+          })
+          .join('')}</details>`,
+    )
+    .join('');
+  for (const [provider, spec] of Object.entries(fields))
+    for (const [key] of spec.fields)
+      $(`${provider}-${key}`).value = settings.providers[provider][key];
+  document.querySelectorAll('.toggle-btn').forEach((button) => {
+    button.onclick = () => {
+      const input = $(button.dataset.target);
+      input.type = input.type === 'password' ? 'text' : 'password';
+      button.textContent = input.type === 'password' ? '显示' : '隐藏';
+    };
+  });
+}
+function collect() {
+  const settings = structuredClone(loadedSettings || DEFAULTS);
+  for (const key of [
+    'ttsProvider',
+    'translationProvider',
+    'aiProvider',
+    'pronunciation',
+    'sourceLanguage',
+    'targetLanguage',
+    'browserVoice',
+  ])
+    settings[key] = $(key).value;
+  settings.speechRate = Number($('speechRate').value);
+  settings.showTranslation = $('showTranslation').checked;
+  for (const [provider, spec] of Object.entries(fields))
+    for (const [key] of spec.fields)
+      settings.providers[provider][key] = $(`${provider}-${key}`).value.trim();
+  return settings;
+}
+async function load() {
+  try {
+    const settings = await getSettings();
+    loadedSettings = settings;
+    for (const [id, list] of [
+      ['ttsProvider', PROVIDER_LIST],
+      ['translationProvider', TRANSLATION_PROVIDER_LIST],
+      ['aiProvider', AI_PROVIDER_LIST],
+    ])
+      $(id).innerHTML = list.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
+    for (const id of ['sourceLanguage', 'targetLanguage'])
+      $(id).innerHTML = LANGUAGES.map(
+        (l) => `<option value="${l.code}">${l.nameZh} (${l.name})</option>`,
+      ).join('');
+    for (const key of [
+      'ttsProvider',
+      'translationProvider',
+      'aiProvider',
+      'pronunciation',
+      'sourceLanguage',
+      'targetLanguage',
+    ])
+      $(key).value = settings[key];
+    if (![...$('speechRate').options].some((o) => Number(o.value) === settings.speechRate))
+      $('speechRate').add(new Option(`${settings.speechRate}×`, settings.speechRate));
+    $('speechRate').value = String(settings.speechRate);
+    $('showTranslation').checked = settings.showTranslation;
+    renderFields(settings);
+    // Retain a saved choice even if voice discovery is temporarily unavailable.
+    renderBrowserVoices(settings.browserVoice);
+    await refreshVoices(settings.browserVoice);
+    $('saveBtn').disabled = false;
+    $('settingsForm').oninput = () => {
+      dirty = true;
+      $('saveStatus').dataset.dirty = 'true';
+      $('saveStatus').textContent = '有未保存的更改';
+      $('saveStatus').classList.add('show');
+    };
+    await refreshDiagnostics();
+  } catch (error) {
+    showStatus(error.message, true);
+  }
+}
+for (const id of ['ttsProvider', 'translationProvider', 'aiProvider']) {
+  $(id).addEventListener('change', () => {
+    const section = document.querySelector(`.credential-section[data-provider="${$(id).value}"]`);
+    if (section) section.open = true;
+  });
+}
+$('settingsForm').onsubmit = async (event) => {
+  event.preventDefault();
+  if (!loadedSettings) return;
+  $('saveBtn').disabled = true;
+  try {
+    loadedSettings = collect();
+    await saveSettings(loadedSettings);
+    dirty = false;
+    $('saveStatus').dataset.dirty = 'false';
+    $('saveStatus').textContent = '已保存';
+    $('saveStatus').classList.add('show');
+    showStatus('设置已保存');
+    await refreshDiagnostics();
+  } catch (error) {
+    showStatus(error.message, true);
+  } finally {
+    $('saveBtn').disabled = false;
+  }
+};
+window.addEventListener('beforeunload', (event) => {
+  if (dirty) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});
+let testing = false;
+async function test(type) {
+  if (!loadedSettings || testing) return;
+  testing = true;
+  document.querySelectorAll('#testTts, #testTranslation, #testAi').forEach((b) => {
+    b.disabled = true;
+  });
+  const settings = collect();
+  const provider =
+    settings[type === 'tts' ? 'ttsProvider' : type === 'ai' ? 'aiProvider' : 'translationProvider'];
+  const log = $('testLog');
+  $(type === 'tts' ? 'testTts' : type === 'ai' ? 'testAi' : 'testTranslation').parentElement.append(
+    log,
+  );
+  log.classList.add('visible');
+  log.textContent = '正在连接并准备结果…';
+  log.dataset.state = 'loading';
+  log.setAttribute('aria-busy', 'true');
+  const started = performance.now();
+  try {
+    const result = await send('testApi', {
       type,
       provider,
-      config
+      config: settings.providers[provider] || {},
+      preferences: settings,
     });
-    const elapsed = Date.now() - start;
-    renderTestLog(logEl, response, elapsed);
+    if (result.error) throw new Error(result.error);
+    log.dataset.state = 'success';
+    log.textContent = `成功 · ${Math.round(performance.now() - started)} ms\n${result.result}`;
   } catch (error) {
-    const elapsed = Date.now() - start;
-    renderTestLog(logEl, { error: error.message, logs: [] }, elapsed);
-  }
-
-  btn.textContent = origText;
-  btn.classList.remove('loading');
-});
-
-// ========== 缓存管理 ==========
-
-async function loadCacheStats() {
-  try {
-    const stats = await db.getAudioCacheStats();
-    $('#cacheCount').textContent = stats.count;
-    $('#cacheSize').textContent = stats.estimatedSizeKB;
-  } catch (e) {
-    console.error('Failed to load cache stats:', e);
+    log.dataset.state = 'error';
+    log.textContent = `测试失败：${error.message}`;
+  } finally {
+    testing = false;
+    log.removeAttribute('aria-busy');
+    document.querySelectorAll('#testTts, #testTranslation, #testAi').forEach((b) => {
+      b.disabled = false;
+    });
+    refreshDiagnostics();
   }
 }
-
-$('#clearCacheBtn').addEventListener('click', async () => {
-  const btn = $('#clearCacheBtn');
-  btn.disabled = true;
-  btn.textContent = '清除中...';
+$('testTts').onclick = () => test('tts');
+$('testTranslation').onclick = () => test('translation');
+$('testAi').onclick = () => test('ai');
+$('stopSpeech').onclick = () =>
+  send('stopSpeech').catch((error) => showStatus(error.message, true));
+async function refreshDiagnostics() {
+  try {
+    const [status, result, cache] = await Promise.all([
+      send('getTtsStatus'),
+      send('getTtsLog'),
+      db.getAudioCacheStats(),
+    ]);
+    $('ttsStatus').textContent =
+      `已保存的发音服务：${status.providerName} · ${status.configured ? '已配置' : '请填写凭据'}`;
+    $('ttsLogContainer').innerHTML = result.log.length
+      ? `<table class="tts-log-table"><thead><tr><th>时间</th><th>文本</th><th>来源</th><th>启动耗时</th></tr></thead><tbody>${result.log.map((entry) => `<tr><td>${esc(entry.time)}</td><td>${esc(entry.text)}</td><td>${esc(entry.source)}${entry.degraded ? '（备用）' : ''}</td><td>${Number(entry.elapsedMs)} ms</td></tr>`).join('')}</tbody></table>`
+      : '<p class="hint">使用朗读后，这里会显示记录。</p>';
+    $('cacheCount').textContent = cache.count;
+    $('cacheSize').textContent = cache.estimatedSizeKB;
+  } catch (error) {
+    showStatus(error.message, true);
+  }
+}
+$('refreshLogBtn').onclick = refreshDiagnostics;
+$('clearCacheBtn').onclick = async () => {
+  $('clearCacheBtn').disabled = true;
   try {
     await db.clearAudioCache();
-    await loadCacheStats();
-    btn.textContent = '已清除';
-    setTimeout(() => {
-      btn.textContent = '清除全部音频缓存';
-      btn.disabled = false;
-    }, 1500);
-  } catch (e) {
-    console.error('Failed to clear cache:', e);
-    btn.textContent = '清除失败';
-    setTimeout(() => {
-      btn.textContent = '清除全部音频缓存';
-      btn.disabled = false;
-    }, 1500);
+    await refreshDiagnostics();
+    showStatus('音频缓存已清除');
+  } catch (error) {
+    showStatus(error.message, true);
+  } finally {
+    $('clearCacheBtn').disabled = false;
   }
-});
-
-// ========== TTS 配置摘要 + 发音日志 ==========
-
-async function loadTtsStatus() {
-  try {
-    const response = await chrome.runtime.sendMessage({ action: 'getTtsStatus' });
-    if (!response?.success) return;
-
-    $('#ttsStatusProvider').textContent = response.providerName || '—';
-    $('#ttsStatusVoice').textContent = response.voice || '(默认)';
-    $('#ttsStatusAccent').textContent = response.pronunciation === 'uk' ? '英式 (UK)' : '美式 (US)';
-
-    const stateEl = $('#ttsStatusState');
-    if (response.configured) {
-      stateEl.textContent = '● 已配置';
-      stateEl.className = 'tts-status-value configured';
-    } else {
-      stateEl.textContent = '● 未配置 API Key';
-      stateEl.className = 'tts-status-value not-configured';
-    }
-  } catch (e) {
-    console.error('Failed to load TTS status:', e);
-  }
-}
-
-async function loadTtsLog() {
-  try {
-    const response = await chrome.runtime.sendMessage({ action: 'getTtsLog' });
-    if (!response?.success) return;
-
-    const container = $('#ttsLogContainer');
-    const log = response.log || [];
-
-    if (log.length === 0) {
-      container.innerHTML = '<p class="hint">暂无发音记录（使用扩展发音后这里会显示日志）</p>';
-      return;
-    }
-
-    let html = `<table class="tts-log-table">
-      <thead><tr><th>时间</th><th>文本</th><th>来源</th><th>耗时</th><th>状态</th></tr></thead><tbody>`;
-
-    for (const entry of log) {
-      const cls = entry.degraded ? 'degraded' : '';
-      const badge = entry.degraded
-        ? '<span class="log-badge warn">降级</span>'
-        : '<span class="log-badge ok">正常</span>';
-      html += `<tr class="${cls}">
-        <td>${escapeForHtml(entry.time)}</td>
-        <td>${escapeForHtml(entry.text)}</td>
-        <td>${escapeForHtml(entry.source)}</td>
-        <td>${entry.elapsedMs}ms</td>
-        <td>${badge}</td>
-      </tr>`;
-    }
-
-    html += '</tbody></table>';
-
-    if (response.degradations >= 3) {
-      html = `<div style="padding: 8px 12px; background: rgba(240, 192, 128, 0.15); border-radius: 8px; margin-bottom: 10px; font-size: 13px; color: var(--warning);">
-        ⚠ 连续 ${response.degradations} 次发音降级，请检查 TTS 服务商配置
-      </div>` + html;
-    }
-
-    container.innerHTML = html;
-  } catch (e) {
-    console.error('Failed to load TTS log:', e);
-  }
-}
-
-$('#refreshLogBtn').addEventListener('click', () => {
-  loadTtsLog();
-  loadTtsStatus();
-});
-
-// ========== TTS 服务商切换自动测试 ==========
-
-function autoTestTtsProvider(providerId) {
-  // 延迟 300ms 等配置面板动画完成
-  setTimeout(() => {
-    const testBtn = document.querySelector(`#config-${providerId} .test-btn[data-test-type="tts"]`);
-    if (testBtn) testBtn.click();
-  }, 300);
-}
-
-// 初始化
-loadSettings();
-loadCacheStats();
-loadTtsStatus();
-loadTtsLog();
+};
+$('openShortcuts').onclick = (event) => {
+  event.preventDefault();
+  chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+};
+const navLinks = [...document.querySelectorAll('.settings-sidebar nav a')];
+const observer = new IntersectionObserver(
+  (entries) => {
+    const visible = entries
+      .filter((entry) => entry.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+    if (!visible) return;
+    navLinks.forEach((link) => {
+      const active = link.hash === `#${visible.target.id}`;
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+  },
+  { rootMargin: '-10% 0px -65% 0px', threshold: 0 },
+);
+document.querySelectorAll('section[id]').forEach((section) => observer.observe(section));
+load();
