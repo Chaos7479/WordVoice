@@ -9,6 +9,7 @@ import {
 } from '../lib/settings.js';
 import { send, escapeHtml as esc, showStatus } from '../lib/ui.js';
 import db from '../lib/db.js';
+import { compatibleVoices, selectBrowserVoice, isCharacterVoice } from '../lib/voices.js';
 const $ = (id) => document.getElementById(id);
 const fields = {
   dashscope: {
@@ -53,6 +54,50 @@ const fields = {
 };
 let loadedSettings;
 let dirty = false;
+let browserVoices = [];
+function renderBrowserVoices(selected = $('browserVoice').value) {
+  const preferences = {
+    sourceLanguage: $('sourceLanguage').value,
+    pronunciation: $('pronunciation').value,
+  };
+  const voices = compatibleVoices(browserVoices, preferences);
+  const automatic = selectBrowserVoice(browserVoices, preferences);
+  const select = $('browserVoice');
+  select.replaceChildren(
+    new Option(`自动选择${automatic ? ` · ${automatic.voiceName}` : '朗读音色'}`, ''),
+  );
+  for (const voice of voices)
+    select.add(
+      new Option(
+        `${voice.voiceName} · ${voice.lang} · ${voice.remote ? '联网' : '本地'}${isCharacterVoice(voice) ? ' · 特殊音效' : ''}`,
+        voice.voiceName,
+      ),
+    );
+  const missing = selected && !voices.some((voice) => voice.voiceName === selected);
+  if (missing) select.add(new Option(`${selected}（当前不可用）`, selected));
+  select.value = selected;
+  $('browserVoiceHint').textContent = missing
+    ? '已保存的音色当前不可用，朗读时自动选择。可重新选择并保存。'
+    : automatic
+      ? `自动模式优先使用普通朗读音色：${automatic.voiceName}。`
+      : '当前未找到普通朗读音色，将使用系统默认音色。可在系统语音设置中添加音色后刷新。';
+}
+async function refreshVoices(selected = $('browserVoice').value) {
+  $('refreshVoices').disabled = true;
+  try {
+    const result = await send('getBrowserVoices');
+    if (result.error) throw new Error(result.error);
+    browserVoices = result.voices || [];
+    renderBrowserVoices(selected);
+  } catch (error) {
+    $('browserVoiceHint').textContent = `音色列表暂不可用：${error.message}`;
+  } finally {
+    $('refreshVoices').disabled = false;
+  }
+}
+$('refreshVoices').onclick = () => refreshVoices();
+for (const id of ['sourceLanguage', 'pronunciation'])
+  $(id).addEventListener('change', () => renderBrowserVoices(''));
 function renderFields(settings) {
   $('providerFields').innerHTML = Object.entries(fields)
     .map(
@@ -92,6 +137,7 @@ function collect() {
     'pronunciation',
     'sourceLanguage',
     'targetLanguage',
+    'browserVoice',
   ])
     settings[key] = $(key).value;
   settings.speechRate = Number($('speechRate').value);
@@ -129,6 +175,9 @@ async function load() {
     $('speechRate').value = String(settings.speechRate);
     $('showTranslation').checked = settings.showTranslation;
     renderFields(settings);
+    // Retain a saved choice even if voice discovery is temporarily unavailable.
+    renderBrowserVoices(settings.browserVoice);
+    await refreshVoices(settings.browserVoice);
     $('saveBtn').disabled = false;
     $('settingsForm').oninput = () => {
       dirty = true;

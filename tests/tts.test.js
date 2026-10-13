@@ -59,7 +59,10 @@ test('browser speech starts without any dictionary or translation request and ho
   try {
     storage.settings.pronunciation = 'uk';
     storage.settings.speechRate = 0.7;
-    await tts.speak('I live in London.');
+    const result = await tts.speak('I live in London.');
+    assert.equal(result.ttsSource.voice, 'British');
+    assert.match(result.ttsSource.label, /British/);
+    assert.match((await tts.getTtsLog())[0].source, /British/);
     assert.equal(speech.length, 1);
     assert.equal(speech[0].text, 'I live in London.');
     assert.equal(speech[0].options.lang, 'en-GB');

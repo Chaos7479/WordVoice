@@ -16,6 +16,8 @@ async function prepareWorker(target = worker) {
     globalThis.__cloudAudio = '';
     chrome.tts.getVoices = (callback) =>
       callback([
+        { voiceName: 'Albert', lang: 'en-US', remote: false, eventTypes: ['start', 'end'] },
+        { voiceName: 'Samantha', lang: 'en-US', remote: false, eventTypes: ['start', 'end'] },
         {
           voiceName: 'Test English US',
           lang: 'en-US',
@@ -106,6 +108,7 @@ async function prepareWorker(target = worker) {
       return new Response('', { status: 503 });
     };
   });
+  await harness.evaluate(() => chrome.runtime.sendMessage({ action: 'getBrowserVoices' }));
 }
 async function extensionPage(name) {
   const page = await context.newPage();
@@ -637,6 +640,51 @@ test('speech errors remain visible while vocabulary saving succeeds', async () =
   await expect(page.locator('wordvoice-popup .error')).toContainText('语音引擎不可用');
   await expect(page.locator('wordvoice-popup .status')).toContainText('已保存');
   expect((await savedWords()).length).toBe(1);
+});
+
+test('browser voice preview, saved selection, logs and accent changes use the chosen voice', async () => {
+  const options = await extensionPage('options');
+  await expect(options.locator('#saveBtn')).toBeEnabled();
+  await expect(options.locator('#browserVoice option').first()).toContainText('Samantha');
+  await options.locator('#testTts').click();
+  await expect(options.locator('#testLog')).toContainText('Samantha');
+  expect(await worker.evaluate(() => __calls.at(-1).voice)).toBe('Samantha');
+  await options.locator('#browserVoice').selectOption('Test English US');
+  await options.locator('#testTts').click();
+  await expect(options.locator('#testLog')).toContainText('Test English US');
+  await options.locator('#saveBtn').click();
+  await options.reload();
+  await expect(options.locator('#browserVoice')).toHaveValue('Test English US');
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  await expect(page.locator('wordvoice-popup .status')).toContainText('Test English US');
+  await options.locator('#refreshLogBtn').click();
+  await expect(options.locator('#ttsLogContainer')).toContainText('Test English US');
+  await options.locator('#pronunciation').selectOption('uk');
+  await expect(options.locator('#browserVoice')).toHaveValue('');
+  await expect(options.locator('#browserVoice option').first()).toContainText('Test English UK');
+  await options.locator('#saveBtn').click();
+});
+
+test('removed browser voices remain visible in settings and fall back when speaking', async () => {
+  await setSettings({ browserVoice: 'Removed Voice' });
+  const options = await extensionPage('options');
+  await expect(options.locator('#saveBtn')).toBeEnabled();
+  await expect(options.locator('#browserVoice')).toHaveValue('Removed Voice');
+  await expect(options.locator('#browserVoiceHint')).toContainText('当前不可用');
+  await options.locator('#testTts').click();
+  await expect(options.locator('#testLog')).toContainText('Samantha');
+  await worker.evaluate(() => {
+    chrome.tts.getVoices = (callback) =>
+      callback([
+        { voiceName: 'Removed Voice', lang: 'en-US', remote: false, eventTypes: ['start'] },
+      ]);
+  });
+  await options.locator('#refreshVoices').click();
+  await expect(options.locator('#browserVoiceHint')).toContainText('自动模式');
+  await options.locator('#testTts').click();
+  await expect(options.locator('#testLog')).toContainText('Removed Voice');
 });
 
 test('S wakes a stopped service worker and retains data and settings', async () => {

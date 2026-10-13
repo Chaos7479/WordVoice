@@ -30,6 +30,17 @@
             <p class="hint">浏览器会优先使用对应口音的本地语音。云端口音由所选音色决定。</p>
           </div>
           <div class="field">
+            <label for="browserVoice">浏览器音色</label>
+            <select id="browserVoice">
+              <option value="">自动选择朗读音色</option>
+            </select>
+            <p id="browserVoiceHint" class="hint">正在读取可用音色…</p>
+            <p class="hint">
+              用于浏览器朗读和云端失败后的备用朗读。可在下方试听，保存后生效。联网音色需要网络。
+            </p>
+            <button type="button" id="refreshVoices" class="test-btn">刷新音色列表</button>
+          </div>
+          <div class="field">
             <label for="speechRate">朗读速度</label
             ><select id="speechRate">
               <option value="0.7">0.7× 慢速</option>

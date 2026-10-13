@@ -1,5 +1,5 @@
 import db from '../lib/db.js';
-import tts from '../lib/tts.js';
+import tts, { getVoices } from '../lib/tts.js';
 import { fetchWordData } from '../lib/lookup.js';
 import { translateWord, translateDirect } from '../lib/translate.js';
 import { getSettings, saveSettings, PROVIDER_LIST, normalizeSettings } from '../lib/settings.js';
@@ -173,6 +173,7 @@ const handlers = {
     log: await tts.getTtsLog(),
     degradations: await tts.getConsecutiveDegradations(),
   }),
+  getBrowserVoices: async () => ({ voices: await getVoices(true) }),
   getTtsStatus: async () => {
     const settings = await getSettings();
     const provider = settings.ttsProvider;
