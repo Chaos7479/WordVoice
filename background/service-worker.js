@@ -2,7 +2,16 @@ import db from '../lib/db.js';
 import tts, { getVoices } from '../lib/tts.js';
 import { fetchWordData } from '../lib/lookup.js';
 import { translateWord, translateDirect } from '../lib/translate.js';
-import { getSettings, saveSettings, PROVIDER_LIST, normalizeSettings } from '../lib/settings.js';
+import {
+  getSettings,
+  saveSettings,
+  PROVIDER_LIST,
+  normalizeSettings,
+  speechOptions,
+  isSpeechConfigured,
+  chooseSpeechProvider,
+  importLocalCredentials,
+} from '../lib/settings.js';
 import { generateSentences } from '../lib/ai-sentences.js';
 import { complete } from '../lib/llm.js';
 import { normalizeText, getTextType, textField, safePageUrl } from '../lib/text.js';
@@ -28,6 +37,7 @@ async function handlePronounce(message, sender) {
     .speak(word)
     .then(async (result) => {
       await sendUpdate(sender, requestId, {
+        speechRequestId: requestId,
         speech: result.ttsSource.label,
         speechWarning: result.fallbackReason || '',
         speaking: true,
@@ -36,8 +46,18 @@ async function handlePronounce(message, sender) {
     })
     .catch(async (error) => {
       const cancelled = error.name === 'AbortError';
-      if (cancelled) await sendUpdate(sender, requestId, { stopped: true, speaking: false });
-      else await sendUpdate(sender, requestId, { speechError: error.message, speaking: false });
+      if (cancelled)
+        await sendUpdate(sender, requestId, {
+          speechRequestId: requestId,
+          stopped: true,
+          speaking: false,
+        });
+      else
+        await sendUpdate(sender, requestId, {
+          speechRequestId: requestId,
+          speechError: error.message,
+          speaking: false,
+        });
       return { error: error.message, cancelled };
     });
   const savePromise = db
@@ -63,6 +83,7 @@ async function handlePronounce(message, sender) {
       return null;
     });
   const settings = await settingsPromise;
+  await sendUpdate(sender, requestId, { speechOptions: speechOptions(settings) });
   const dictionary =
     settings.sourceLanguage === 'en' && getTextType(word) === 'word'
       ? fetchWordData(word, settings.pronunciation).catch(() => ({ definitions: [] }))
@@ -107,6 +128,19 @@ const handlers = {
   ping: async () => ({}),
   stopSpeech: () => tts.stopSpeech().then(() => ({})),
   playOnly: (message) => tts.speak(normalizeText(message.word)).then((speech) => ({ speech })),
+  getSpeechOptions: async () => ({ speechOptions: speechOptions(await getSettings()) }),
+  replaySelection: async (message) => {
+    const word = normalizeText(message.word);
+    const settings =
+      message.provider === undefined ? getSettings() : chooseSpeechProvider(message.provider);
+    // Claim the playback slot before waiting for preferences, so the newest request wins.
+    const speech = await tts.speak(word, settings);
+    return { speech, speechOptions: speechOptions(await settings) };
+  },
+  openSpeechSettings: async () => {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#services') });
+    return {};
+  },
   getWords: (message) => db.queryWords(message.options || {}),
   searchWords: async (message) => ({ words: await db.searchWords(message.query) }),
   getStats: async () => ({ stats: await db.getStats() }),
@@ -183,9 +217,7 @@ const handlers = {
       providerName: PROVIDER_LIST.find((p) => p.id === provider)?.name,
       voice: config.voice || config.voiceType || config.voiceId || '',
       pronunciation: settings.pronunciation,
-      configured:
-        ['chrome-tts', 'free-dict'].includes(provider) ||
-        (provider === 'doubao' ? !!(config.appId && config.accessToken) : !!config.apiKey),
+      configured: isSpeechConfigured(settings, provider),
     };
   },
   testApi: async (message) => {
@@ -242,7 +274,33 @@ function validId(value) {
   if (!Number.isSafeInteger(value) || value < 1) throw new Error('无效的词条 ID');
   return value;
 }
-const contentActions = new Set(['pronounce', 'stopSpeech', 'ping']);
+const contentActions = new Set([
+  'pronounce',
+  'stopSpeech',
+  'ping',
+  'getSpeechOptions',
+  'replaySelection',
+  'openSpeechSettings',
+]);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const options = speechOptions(normalizeSettings(changes.settings.newValue));
+  chrome.tabs
+    .query({ url: ['http://*/*', 'https://*/*'] })
+    .then((tabs) =>
+      Promise.allSettled(
+        tabs
+          .filter((tab) => tab.id)
+          .map((tab) =>
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'speechOptionsChanged',
+              speechOptions: options,
+            }),
+          ),
+      ),
+    )
+    .catch(() => {});
+});
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (message?.target === 'offscreen' || message?.action === 'dataChanged') return false;
   if (sender.id !== chrome.runtime.id) return false;
@@ -287,6 +345,7 @@ chrome.runtime.onInstalled.addListener(() => {
   (async () => {
     await getSettings();
     await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+    await importLocalCredentials();
     await db.open();
     const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
     await Promise.allSettled(tabs.filter((t) => t.id).map((t) => inject(t.id)));

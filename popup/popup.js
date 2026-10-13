@@ -27,7 +27,7 @@ async function load() {
     ])
       document.getElementById(element).textContent = summary.stats[key];
     const list = document.getElementById('wordList');
-    document.getElementById('listHeading').textContent = query ? '搜索结果' : '最近遇见';
+    document.getElementById('listHeading').textContent = query ? '搜索结果' : '最近记录';
     list.innerHTML = result.words.length
       ? result.words
           .map(
@@ -36,11 +36,8 @@ async function load() {
           )
           .join('')
       : emptyState(
-          query ? '没有匹配结果' : '从一个好奇的词开始',
-          query
-            ? '试试原文、译文，或更短的关键词。'
-            : '在网页选中文字，按 S。下次打开，它就在这里。',
-          query ? 'search' : 'book',
+          query ? '没有匹配结果' : '暂无记录',
+          query ? '试试原文、译文，或更短的关键词。' : '在网页选中文字，按 S 朗读并保存。',
         );
     list.querySelectorAll('.word-item').forEach((item) => {
       const word = result.words.find((w) => w.id === Number(item.dataset.id));

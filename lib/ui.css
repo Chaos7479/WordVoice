@@ -207,13 +207,6 @@ input[type='checkbox'] {
   font-weight: 650;
   letter-spacing: -0.6px;
 }
-.eyebrow {
-  font-size: 10px;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  font-weight: 600;
-  color: var(--muted);
-}
 .hint,
 .section-desc {
   color: var(--secondary);
@@ -313,23 +306,9 @@ kbd {
   color: var(--surface);
 }
 .word-list-empty {
-  padding: 42px 16px;
+  padding: 24px 16px;
   text-align: center;
   color: var(--secondary);
-}
-.empty-symbol {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  margin: 0 auto 20px;
-  color: var(--primary);
-  background: var(--tint);
-  border-radius: 19px;
-}
-.empty-symbol .icon {
-  width: 28px;
-  height: 28px;
 }
 .empty-title {
   display: block;

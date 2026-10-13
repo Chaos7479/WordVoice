@@ -9,17 +9,15 @@ html {
   gap: 56px;
   max-width: 1120px;
   margin: auto;
-  padding: 48px 32px 110px;
+  padding: 32px 32px 110px;
 }
 .settings-sidebar {
   position: sticky;
-  top: 48px;
+  top: 32px;
   align-self: start;
 }
-.settings-sidebar > .eyebrow {
-  margin: 46px 10px 14px;
-}
 .settings-sidebar nav {
+  margin-top: 24px;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -42,35 +40,18 @@ html {
   background: var(--tint);
   font-weight: 600;
 }
-.sidebar-note {
-  margin: 44px 12px 0;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.8;
-}
-.sidebar-note kbd {
-  width: 32px;
-  padding: 5px;
-  margin-bottom: 12px;
-}
 .container {
   min-width: 0;
 }
 .settings-heading {
-  padding: 5px 0 32px;
+  padding: 0 0 20px;
 }
 .settings-heading h1 {
-  font-size: 29px;
+  font-size: 24px;
   letter-spacing: -1px;
   line-height: 1.4;
-  margin: 10px 0 12px;
+  margin: 0;
   font-weight: 650;
-}
-.settings-heading p {
-  font-size: 13px;
-  color: var(--secondary);
 }
 .section {
   padding: 26px;
@@ -325,11 +306,8 @@ html {
   .settings-sidebar {
     position: static;
   }
-  .settings-sidebar > .eyebrow,
-  .sidebar-note {
-    display: none;
-  }
   .settings-sidebar nav {
+    margin-top: 24px;
     flex-direction: row;
     overflow: auto;
     margin: 22px -4px;
@@ -344,7 +322,7 @@ html {
     display: none;
   }
   .settings-heading {
-    padding: 12px 6px 24px;
+    padding: 0 6px 18px;
   }
   .settings-heading h1 {
     font-size: 25px;

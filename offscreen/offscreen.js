@@ -57,7 +57,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     }
   };
   timer = setTimeout(() => {
-    if (current === job) stop();
+    if (current === job) {
+      reply({ success: false, error: '音频启动超时，请重试' });
+      release();
+      current = null;
+    }
   }, 4000);
   audio
     .play()

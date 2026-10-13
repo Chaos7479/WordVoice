@@ -14,7 +14,6 @@
           ><span class="brand-mark" data-icon="wave"></span
           ><span class="brand-name">WordVoice</span></a
         >
-        <p class="eyebrow">MAKE IT YOURS</p>
         <nav aria-label="设置导航">
           <a href="#reading" class="active" aria-current="location"
             ><span data-icon="wave"></span>朗读与翻译</a
@@ -23,21 +22,14 @@
           ><a href="#storage"><span data-icon="book"></span>音频缓存</a
           ><a href="#help"><span data-icon="cards"></span>使用指南</a>
         </nav>
-        <div class="sidebar-note">
-          <kbd>S</kbd>
-          <p>一个按键，<br />让好奇继续。</p>
-        </div>
       </aside>
       <main class="container">
         <header class="settings-heading">
-          <span class="eyebrow">PREFERENCES</span>
-          <h1>为你的阅读，调好声音。</h1>
-          <p>熟悉的音色，舒服的节奏。让每次查词都自然一些。</p>
+          <h1>设置</h1>
         </header>
         <form id="settingsForm">
           <section class="section" id="reading" aria-labelledby="readingTitle">
             <h2 id="readingTitle">朗读与翻译</h2>
-            <p class="section-desc wide">选中文字后，声音、释义和记录会同时准备好。</p>
             <div class="field">
               <label for="ttsProvider">发音服务</label
               ><select id="ttsProvider"></select>
@@ -60,9 +52,7 @@
                 <option value="">自动选择朗读音色</option>
               </select>
               <p id="browserVoiceHint" class="hint">正在读取可用音色…</p>
-              <p class="hint">
-                用于浏览器朗读和云端失败后的备用朗读。可在下方试听，保存后生效。联网音色需要网络。
-              </p>
+              <p class="hint">云端失败时使用此音色。联网音色需要网络。</p>
               <div class="voice-preview">
                 <button type="button" id="testTts" class="primary-btn">
                   <span data-icon="wave"></span>试听当前发音</button
@@ -114,8 +104,8 @@
             </p>
           </section>
           <section class="section" id="services" aria-labelledby="servicesTitle">
-            <h2 id="servicesTitle">连接你喜欢的声音</h2>
-            <p class="section-desc">按需填写。密钥只保存在当前浏览器中。每个字段只需填写一次。</p>
+            <h2 id="servicesTitle">云端服务</h2>
+            <p class="section-desc">密钥只保存在当前浏览器中。保存后可在选词浮层切换发音服务。</p>
             <div id="providerFields"></div>
           </section>
         </form>
@@ -135,7 +125,7 @@
           <button type="button" id="clearCacheBtn" class="danger-btn">清除音频缓存</button>
         </section>
         <section class="section" id="help" aria-labelledby="helpTitle">
-          <h2 id="helpTitle">从一个词开始</h2>
+          <h2 id="helpTitle">使用指南</h2>
           <p>
             鼠标选中文本后按 <kbd>S</kbd> 或 <kbd>`</kbd> 朗读。按
             <kbd>Esc</kbd> 关闭提示并停止朗读。
@@ -150,9 +140,7 @@
         <div class="actions">
           <button type="submit" form="settingsForm" id="saveBtn" class="primary-btn" disabled>
             保存设置</button
-          ><span id="saveStatus" class="save-status show" role="status"
-            >设置已保存在当前浏览器</span
-          >
+          ><span id="saveStatus" class="save-status show" role="status">已保存</span>
         </div>
       </main>
     </div>

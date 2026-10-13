@@ -4,3 +4,4 @@ test-results/
 .test-profile-*/
 playwright-report/
 package-lock.json
+settings.local.json

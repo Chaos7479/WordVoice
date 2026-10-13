@@ -35,9 +35,13 @@
     .error { color:var(--warn); font-size:12px; }
     .buttons { display:flex; align-items:center; gap:8px; margin-top:14px; }
     .buttons .escape { margin-left:auto; font-size:10px; color:var(--secondary); }
+    .speech-controls { display:flex; align-items:center; gap:8px; margin-top:12px; }
+    .speech-controls label { color:var(--secondary); font-size:12px; flex-shrink:0; }
+    .speech-provider { min-width:0; flex:1; font:12px -apple-system,BlinkMacSystemFont,sans-serif; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:8px; min-height:32px; padding:5px; }
+    .configure { flex-shrink:0; padding:6px 8px; }
     button { font:12px -apple-system,BlinkMacSystemFont,sans-serif; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:9px; min-height:32px; padding:7px 11px; cursor:pointer; }
     button:hover { background:var(--tint); } button:active { transform:scale(.97); }
-    button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+    button:focus-visible,select:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
     .replay { color:var(--accent); background:var(--tint); border-color:transparent; }
     .close { border:0; min-height:26px; width:26px; padding:0; color:var(--secondary); font-size:19px; }
     [hidden] { display:none!important; }
@@ -90,6 +94,63 @@
     }
     position();
   }
+  function renderSpeechOptions(options) {
+    const select = shadow?.querySelector('.speech-provider');
+    if (!select || !options) return;
+    select.replaceChildren(
+      ...options.providers.map((provider) => {
+        const label = `${provider.name}${provider.model ? ` · ${provider.model}` : ''}${provider.configured ? '' : '（未配置）'}`;
+        const option = new Option(label, provider.id);
+        option.disabled = !provider.configured;
+        return option;
+      }),
+    );
+    select.value = options.provider;
+    select.disabled = false;
+  }
+  async function refreshSpeechOptions() {
+    const entry = current;
+    if (!host || !entry || entry.dismissed) return;
+    try {
+      const result = await chrome.runtime.sendMessage({ action: 'getSpeechOptions' });
+      if (current === entry && !entry.dismissed && result?.success) {
+        renderSpeechOptions(result.speechOptions);
+      }
+    } catch {
+      /* A stale extension context is explained on the next playback attempt. */
+    }
+  }
+  async function replay(provider) {
+    const entry = current;
+    if (!entry?.text || entry.dismissed) return;
+    const playbackId = crypto.randomUUID();
+    entry.playbackId = playbackId;
+    entry.stopped = false;
+    entry.speaking = false;
+    entry.speech = '';
+    entry.speechError = '';
+    entry.speechWarning = '';
+    clearTimeout(timer);
+    render();
+    try {
+      const result = await chrome.runtime.sendMessage({
+        action: 'replaySelection',
+        word: entry.text,
+        ...(provider ? { provider } : {}),
+      });
+      if (current !== entry || entry.dismissed || entry.playbackId !== playbackId) return;
+      if (!result?.success) throw new Error(result?.error || '朗读失败，请重试');
+      entry.speech = result.speech.ttsSource.label;
+      entry.speechWarning = result.speech.fallbackReason || '';
+      entry.speaking = true;
+      renderSpeechOptions(result.speechOptions);
+    } catch (error) {
+      if (current !== entry || entry.dismissed || entry.playbackId !== playbackId) return;
+      entry.speechError = error.message || '连接已中断，请刷新网页后重试';
+      refreshSpeechOptions();
+    }
+    render();
+  }
   function position() {
     if (!host) return;
     const rect = current?.rect;
@@ -116,20 +177,25 @@
     host.style.cssText =
       'all: initial !important; position: fixed !important; z-index: 2147483647 !important; display: block !important;';
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${style}</style><div class="card" role="region" aria-label="WordVoice 选词结果"><div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4"/></svg>WordVoice<button class="close" aria-label="关闭">×</button></div><div class="head"><strong tabindex="0"></strong></div><div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p><p class="status">正在启动朗读…</p><p class="error" hidden></p></div><div class="buttons"><button class="replay">再读一次</button><button class="stop">停止朗读</button><span class="escape">Esc 关闭</span></div></div>`;
+    shadow.innerHTML = `<style>${style}</style><div class="card" role="region" aria-label="WordVoice 选词结果"><div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4"/></svg>WordVoice<button class="close" aria-label="关闭">×</button></div><div class="head"><strong tabindex="0"></strong></div><div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p><p class="status">正在启动朗读…</p><p class="error" hidden></p></div><div class="speech-controls"><label for="speech-provider">发音</label><select id="speech-provider" class="speech-provider" aria-label="发音服务，切换后重读并记住选择" disabled><option>正在加载…</option></select><button class="configure" title="配置语音服务 Key 和音色">配置</button></div><div class="buttons"><button class="replay">再读一次</button><button class="stop">停止朗读</button><span class="escape">Esc 关闭</span></div></div>`;
     shadow.querySelector('strong').textContent = text;
     shadow.querySelector('.close').onclick = dismiss;
     shadow.querySelector('.stop').onclick = () => {
       chrome.runtime.sendMessage({ action: 'stopSpeech' }).catch(() => {});
       if (current) {
+        current.playbackId = crypto.randomUUID();
         current.stopped = true;
         render();
       }
     };
-    shadow.querySelector('.replay').onclick = () => {
-      if (current) {
-        start(current.text, current.rect, current.sentence);
-        shadow?.querySelector('.replay').focus();
+    shadow.querySelector('.replay').onclick = () => replay();
+    shadow.querySelector('.speech-provider').onchange = (event) => replay(event.target.value);
+    shadow.querySelector('.configure').onclick = async () => {
+      try {
+        const result = await chrome.runtime.sendMessage({ action: 'openSpeechSettings' });
+        if (!result?.success) throw new Error('无法打开设置，请从扩展菜单打开');
+      } catch (error) {
+        setLine('error', error.message);
       }
     };
     host.addEventListener('mouseenter', () => clearTimeout(timer));
@@ -143,6 +209,8 @@
   function fail(text) {
     show('WordVoice', null);
     current = { dismissed: false, rect: null };
+    shadow.querySelector('.speech-controls').hidden = true;
+    shadow.querySelector('.buttons').hidden = true;
     setLine('status', '');
     setLine('error', text);
     position();
@@ -164,7 +232,7 @@
     }
     const requestId = crypto.randomUUID();
     show(text, rect);
-    current = { requestId, text, rect, sentence, dismissed: false };
+    current = { requestId, playbackId: requestId, text, rect, sentence, dismissed: false };
     render();
     try {
       const response = await chrome.runtime.sendMessage({
@@ -282,9 +350,22 @@
     { capture: true, passive: true, signal },
   );
   window.addEventListener('resize', position, { passive: true, signal });
+  window.addEventListener('focus', refreshSpeechOptions, { signal });
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (!document.hidden) refreshSpeechOptions();
+    },
+    { signal },
+  );
   window.addEventListener('pagehide', dismiss, { signal });
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!state.alive || sender.id !== chrome.runtime.id) return false;
+    if (message.action === 'speechOptionsChanged') {
+      renderSpeechOptions(message.speechOptions);
+      respond({ success: true });
+      return false;
+    }
     if (message.action === 'getSelection') {
       // Only the focused frame handles a browser command; no local duplicate Ctrl+Shift+S listener.
       if (document.hasFocus() && !document.activeElement?.matches('iframe, frame')) trigger(true);
@@ -296,6 +377,8 @@
       current?.requestId === message.requestId &&
       !current.dismissed
     ) {
+      if (message.speechRequestId && message.speechRequestId !== current.playbackId) return false;
+      if (message.speechOptions) renderSpeechOptions(message.speechOptions);
       Object.assign(current, message);
       render();
       respond({ success: true });

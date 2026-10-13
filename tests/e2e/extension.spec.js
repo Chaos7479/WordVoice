@@ -499,6 +499,12 @@ test('cloud failure falls back; offscreen audio plays independently of blocked p
   ).toBe(1);
   const calls = await worker.evaluate(() => __calls.length);
   expect(calls).toBe(1);
+  await page.locator('wordvoice-popup .speech-provider').selectOption('chrome-tts');
+  await expect(page.locator('wordvoice-popup .status')).toContainText('Samantha');
+  await page.locator('wordvoice-popup .speech-provider').selectOption('minimax');
+  await expect(page.locator('wordvoice-popup .status')).toContainText('MiniMax');
+  await expect(page.locator('wordvoice-popup .error')).toBeHidden();
+  expect((await savedWords()).find((word) => word.word === 'world').frequency).toBe(1);
   await page.screenshot({ animations: 'disabled', path: 'test-results/selection.png' });
 });
 
@@ -847,7 +853,7 @@ for (const colorScheme of ['light', 'dark']) {
 test('empty views, clear search, keyboard review and modal focus work', async () => {
   const panel = await extensionPage('sidepanel');
   await panel.setViewportSize({ width: 320, height: 640 });
-  await expect(panel.locator('.empty-title')).toContainText('你的词汇');
+  await expect(panel.locator('.empty-title')).toContainText('暂无记录');
   await panel.screenshot({ path: 'test-results/design-empty.png' });
   await panel.locator('#reviewModeBtn').click();
   await expect(panel.locator('#reviewEmpty')).toBeVisible();
@@ -929,6 +935,85 @@ test('long text fits the collection and detail; keyboard focus holds the selecti
   await expect(page.locator('wordvoice-popup')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('wordvoice-popup')).toHaveCount(0);
+});
+
+test('floating speech choices persist, replay without another lookup, and cancel stale speech', async () => {
+  await setSettings({
+    providers: { minimax: { apiKey: 'private-test-key', model: 'speech-02-turbo' } },
+  });
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  const choice = popup.locator('.speech-provider');
+  await expect(choice).toBeEnabled();
+  await expect(choice.locator('option[value="dashscope"]')).toBeDisabled();
+  await expect(choice.locator('option[value="minimax"]')).toBeEnabled();
+  await expect(popup.locator('.status')).toContainText('Samantha');
+  await expect.poll(async () => (await savedWords())[0]?.frequency).toBe(1);
+  await popup.locator('.replay').click();
+  await expect.poll(() => worker.evaluate(() => __calls.length)).toBe(2);
+  expect((await savedWords())[0].frequency).toBe(1);
+  const lookups = await worker.evaluate(
+    () => __fetches.filter((url) => !url.includes('t2a_v2')).length,
+  );
+  await choice.selectOption('minimax');
+  await expect(popup.locator('.error')).toContainText('503');
+  await expect(popup.locator('.status')).toContainText('Samantha');
+  await expect(choice).toHaveValue('minimax');
+  expect(
+    await harness.evaluate(
+      async () => (await chrome.storage.local.get('settings')).settings.ttsProvider,
+    ),
+  ).toBe('minimax');
+  expect((await savedWords())[0].frequency).toBe(1);
+  expect(
+    await worker.evaluate(() => __fetches.filter((url) => !url.includes('t2a_v2')).length),
+  ).toBe(lookups);
+  expect(await popup.textContent()).not.toContain('private-test-key');
+  await worker.evaluate(() => {
+    __delay = 1800;
+  });
+  await popup.locator('.replay').click();
+  await expect
+    .poll(() => worker.evaluate(() => __fetches.filter((url) => url.includes('t2a_v2')).length))
+    .toBe(2);
+  await choice.selectOption('chrome-tts');
+  await expect(popup.locator('.status')).toContainText('Samantha');
+  await expect(popup.locator('.error')).toBeHidden();
+  await expect(choice).toHaveValue('chrome-tts');
+  await page.waitForTimeout(2000);
+  await expect(popup.locator('.status')).not.toContainText('已停止');
+  expect((await savedWords())[0].frequency).toBe(1);
+  await select(page, '#second');
+  await page.keyboard.press('s');
+  await expect(choice).toHaveValue('chrome-tts');
+  await expect(popup.locator('.status')).toContainText('Samantha');
+});
+
+test('floating configuration opens services and refreshes availability after saving', async () => {
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('.speech-provider')).toBeEnabled();
+  const opened = context.waitForEvent('page');
+  await popup.locator('.configure').click();
+  const options = await opened;
+  await options.waitForURL('**/options/options.html#services');
+  await expect(options.locator('#saveBtn')).toBeEnabled();
+  await options.locator('[data-provider="minimax"] summary').click();
+  await options.locator('#minimax-apiKey').fill('private-configured-key');
+  await options.locator('#saveBtn').click();
+  await expect(options.locator('#saveStatus')).toContainText('已保存');
+  await page.bringToFront();
+  await expect(popup.locator('option[value="minimax"]')).toBeEnabled();
+  expect(await popup.textContent()).not.toContain('private-configured-key');
+  const audit = await new AxeBuilder({ page })
+    .include('wordvoice-popup')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(audit.violations).toEqual([]);
 });
 
 test('S wakes a stopped service worker and retains data and settings', async () => {

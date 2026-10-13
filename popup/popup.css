@@ -13,18 +13,6 @@ body {
   justify-content: space-between;
   padding: 22px 22px 16px;
 }
-.popup-intro {
-  padding: 0 22px 19px;
-}
-.popup-intro h1 {
-  margin: 7px 0 6px;
-  font: 27px/1.2 var(--serif);
-  letter-spacing: -0.8px;
-}
-.popup-intro p {
-  color: var(--secondary);
-  font-size: 12px;
-}
 .popup-container .search-bar {
   margin: 0 22px 16px;
 }
@@ -140,9 +128,6 @@ body {
 }
 .word-list-empty {
   padding: 20px 12px 24px;
-}
-.word-list-empty .empty-symbol {
-  display: none;
 }
 .word-list-empty .empty-title {
   font-size: 15px;

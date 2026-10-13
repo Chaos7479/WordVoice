@@ -18,19 +18,15 @@ body {
   padding: 18px 20px 12px;
 }
 .page-heading {
-  padding: 8px 22px 20px;
+  padding: 0 22px 14px;
   flex-shrink: 0;
 }
 .page-heading h1 {
-  font-size: 28px;
+  font-size: 22px;
   letter-spacing: -1px;
   line-height: 1.3;
-  margin: 6px 0 7px;
+  margin: 0;
   font-weight: 650;
-}
-.page-heading p {
-  font-size: 12px;
-  color: var(--secondary);
 }
 .tools-menu {
   position: relative;
@@ -63,11 +59,6 @@ body {
   box-shadow: var(--shadow);
   z-index: 10;
   animation: appear 0.15s var(--ease);
-}
-.tools-popover p {
-  padding: 7px 8px 12px;
-  font-size: 10px;
-  letter-spacing: 0.5px;
 }
 .tools-popover button {
   width: 100%;
@@ -602,28 +593,9 @@ body {
   text-align: center;
   padding: 32px 0;
 }
-.summary-icon {
-  width: 66px;
-  height: 66px;
-  margin: 0 auto 24px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: var(--success);
-  background: var(--success-tint);
-}
-.summary-icon .icon {
-  width: 30px;
-  height: 30px;
-}
 .summary-title {
   font-size: 23px;
   letter-spacing: -0.6px;
-}
-.summary-description {
-  color: var(--secondary);
-  font-size: 12px;
-  margin-top: 10px;
 }
 .summary-stats {
   display: flex;
@@ -852,7 +824,7 @@ dialog p {
     gap: 0;
   }
   .page-heading {
-    padding: 8px 16px 18px;
+    padding: 0 16px 14px;
   }
   .word-actions .word-frequency {
     display: none;

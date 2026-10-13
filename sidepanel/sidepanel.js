@@ -45,7 +45,8 @@ async function loadWords(append = false) {
     });
     if (generation !== listGeneration) return;
     rows = append ? rows.concat(result.words) : result.words;
-    $('statsText').textContent = `共 ${result.total} 条 · 已显示 ${rows.length} 条`;
+    $('statsText').textContent =
+      `共 ${result.total} 条${rows.length < result.total ? ` · 已显示 ${rows.length} 条` : ''}`;
     const list = $('wordList');
     list.innerHTML = rows.length
       ? rows
@@ -57,10 +58,10 @@ async function loadWords(append = false) {
       : emptyState(
           $('searchInput').value || filter !== 'all' || type !== 'all'
             ? '没有匹配的记录'
-            : '你的词汇，从这里生长',
+            : '暂无记录',
           $('searchInput').value || filter !== 'all' || type !== 'all'
             ? '换一个关键词，或调整上方筛选。'
-            : '回到网页，选中一个好奇的词，按 S。发音与释义会留在这里。',
+            : '在网页选中文字，按 S 朗读并保存。',
         );
     if (rows.length < result.total)
       list.insertAdjacentHTML('beforeend', '<button id="loadMore">加载更多</button>');
@@ -94,19 +95,7 @@ function switchView(next) {
   }
   for (const name of ['wordList', 'review', 'stats'])
     $(`${name}View`).style.display = name === next ? 'flex' : 'none';
-  $('headerTitle').textContent = { wordList: '单词本', review: '温故，知新。', stats: '学习足迹' }[
-    next
-  ];
-  $('viewEyebrow').textContent = {
-    wordList: 'YOUR WORD COLLECTION',
-    review: 'A MOMENT TO REMEMBER',
-    stats: 'SMALL STEPS, REAL PROGRESS',
-  }[next];
-  $('viewDescription').textContent = {
-    wordList: '把阅读中的偶遇，变成自己的词汇。',
-    review: '给遇见过的词，再一次熟悉的机会。',
-    stats: '每一次好奇，都留下了痕迹。',
-  }[next];
+  $('headerTitle').textContent = { wordList: '单词本', review: '复习', stats: '学习统计' }[next];
   for (const [id, name] of [
     ['libraryViewBtn', 'wordList'],
     ['reviewModeBtn', 'review'],
@@ -305,9 +294,8 @@ async function startReview() {
       switchView('review');
       $('reviewEmpty').hidden = false;
       $('reviewEmpty').innerHTML = emptyState(
-        '先遇见，再重逢',
-        '在网页选中单词或短语，按 S 保存。下次来这里，就可以开始复习。',
-        'cards',
+        '暂无可复习内容',
+        '先在网页选中单词或短语，按 S 保存。',
       );
       $('reviewSummary').style.display = 'none';
       $('flashcardContainer').style.display = 'none';
