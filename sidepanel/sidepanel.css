@@ -6,23 +6,23 @@
 /* ---- CSS Custom Properties ---- */
 :root {
   /* Primary — Rose Macaron */
-  --primary: #E8828A;
-  --primary-light: #F0A8AE;
-  --primary-dark: #D06E76;
+  --primary: #e8828a;
+  --primary-light: #f0a8ae;
+  --primary-dark: #d06e76;
   --primary-glow: rgba(232, 130, 138, 0.3);
 
   /* Accent — Lavender Macaron */
-  --accent: #B8A0D2;
-  --success: #7EC89A;
-  --warning: #F0C080;
-  --danger: #E88888;
+  --accent: #b8a0d2;
+  --success: #7ec89a;
+  --warning: #f0c080;
+  --danger: #e88888;
 
   /* Backgrounds — Cream & White */
-  --bg-deep: #FFF8F3;
-  --bg-card: #FFFFFF;
-  --bg-card-hover: #FFF2EB;
-  --bg-input: #FEF5F0;
-  --bg-elevated: #FFFFFF;
+  --bg-deep: #fff8f3;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fff2eb;
+  --bg-input: #fef5f0;
+  --bg-elevated: #ffffff;
 
   /* Text — Pure black on light */
   --text-primary: #000000;
@@ -60,7 +60,9 @@
 
 /* ---- Base ---- */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue',
+    sans-serif;
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-primary);
@@ -236,7 +238,9 @@ body {
 
 .search-bar input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(232, 130, 138, 0.12), 0 0 16px rgba(232, 130, 138, 0.08);
+  box-shadow:
+    0 0 0 3px rgba(232, 130, 138, 0.12),
+    0 0 16px rgba(232, 130, 138, 0.08);
   background: rgba(22, 22, 42, 0.9);
 }
 
@@ -322,11 +326,11 @@ body {
   transition: var(--transition);
 }
 
-.word-card[data-mastery="learning"]::before {
+.word-card[data-mastery='learning']::before {
   background: var(--warning);
 }
 
-.word-card[data-mastery="mastered"]::before {
+.word-card[data-mastery='mastered']::before {
   background: var(--success);
 }
 
@@ -389,13 +393,13 @@ body {
 
 .word-type-badge--phrase {
   background: rgba(184, 160, 210, 0.15);
-  color: #7B6B9E;
+  color: #7b6b9e;
   border: 1px solid rgba(184, 160, 210, 0.3);
 }
 
 .word-type-badge--sentence {
   background: rgba(126, 200, 154, 0.15);
-  color: #4A8A62;
+  color: #4a8a62;
   border: 1px solid rgba(126, 200, 154, 0.3);
 }
 
@@ -442,7 +446,7 @@ body {
 
 .word-translation {
   font-size: 13px;
-  color: #1A1A1A;
+  color: #1a1a1a;
   line-height: 1.5;
   margin-bottom: 2px;
 }
@@ -896,9 +900,11 @@ body {
 
 /* Front: deep gradient with glow */
 .flashcard-front {
-  background: linear-gradient(145deg, #FFF0EA 0%, var(--bg-card) 50%, #F8EAE0 100%);
+  background: linear-gradient(145deg, #fff0ea 0%, var(--bg-card) 50%, #f8eae0 100%);
   border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(232, 130, 138, 0.1);
+  box-shadow:
+    var(--shadow-lg),
+    inset 0 1px 0 rgba(232, 130, 138, 0.1);
   color: var(--text-primary);
 }
 
@@ -1010,7 +1016,7 @@ body {
 
 .card-definition-zh {
   font-size: 13px;
-  color: #1A1A1A;
+  color: #1a1a1a;
   line-height: 1.5;
   margin-top: 2px;
 }
@@ -1093,7 +1099,7 @@ body {
 
 .btn-mastery-learning:hover {
   background: var(--warning);
-  color: #FFFFFF;
+  color: #ffffff;
   border-color: var(--warning);
   box-shadow: 0 4px 16px rgba(240, 192, 128, 0.35);
 }
@@ -1360,7 +1366,9 @@ body {
 .mastery-ring circle {
   fill: none;
   stroke-width: 10;
-  transition: stroke-dasharray 0.6s var(--ease), stroke-dashoffset 0.6s var(--ease);
+  transition:
+    stroke-dasharray 0.6s var(--ease),
+    stroke-dashoffset 0.6s var(--ease);
 }
 
 .ring-bg {
@@ -1555,8 +1563,12 @@ body {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ai-sentences {
@@ -1668,7 +1680,7 @@ body {
 /* Definition translation text */
 .definition-translation {
   font-size: 13px;
-  color: #1A1A1A;
+  color: #1a1a1a;
   line-height: 1.5;
   margin-top: 4px;
   min-height: 0;

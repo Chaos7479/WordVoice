@@ -1,368 +1,115 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <title>WordVoice 设置</title>
-  <link rel="stylesheet" href="options.css">
-</head>
-<body>
-  <div class="container">
-    <h1>WordVoice 设置</h1>
-
-    <!-- 发音偏好 -->
-    <section class="section">
-      <h2>发音偏好</h2>
-      <div class="field">
-        <label>口音</label>
-        <div class="radio-group">
-          <label class="radio"><input type="radio" name="pronunciation" value="us"> 美式 (US)</label>
-          <label class="radio"><input type="radio" name="pronunciation" value="uk"> 英式 (UK)</label>
-        </div>
-      </div>
-      <div class="field">
-        <label class="checkbox-label">
-          <input type="checkbox" id="showTranslation">
-          Toast 气泡显示中文翻译
-        </label>
-      </div>
-    </section>
-
-    <!-- 语言设置 -->
-    <section class="section">
-      <h2>语言设置</h2>
-      <div class="lang-selectors">
-        <div class="field">
-          <label>源语言（学习的语言）</label>
-          <select id="sourceLanguage">
-            <!-- 由 JS 动态生成 -->
-          </select>
-        </div>
-        <div class="lang-arrow">→</div>
-        <div class="field">
-          <label>目标语言（翻译为）</label>
-          <select id="targetLanguage">
-            <!-- 由 JS 动态生成 -->
-          </select>
-        </div>
-      </div>
-      <p class="hint">选择你正在学习的语言和希望翻译成的母语</p>
-    </section>
-
-    <!-- 翻译服务商 -->
-    <section class="section">
-      <h2>翻译服务</h2>
-      <div class="provider-cards" id="translationProviderCards">
-        <!-- 动态生成翻译服务商卡片 -->
-      </div>
-
-      <!-- Google 翻译测试 -->
-      <div class="provider-config" id="config-translation-google" style="display: none;">
-        <h3>Google Translate（免费）</h3>
-        <p class="hint">无需 API Key，直接可用</p>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="translation" data-test-provider="google">测试连接</button>
-          <div class="test-log" id="log-translation-google"></div>
-        </div>
-      </div>
-
-      <!-- Qwen 配置 -->
-      <div class="provider-config" id="config-translation-qwen" style="display: none;">
-        <h3>通义千问 (Qwen) 配置</h3>
-        <div class="field">
-          <label>API Key</label>
-          <div class="password-field">
-            <input type="password" id="qwen-apiKey" placeholder="sk-xxxxxxxxxxxxxxxx">
-            <button class="toggle-btn" data-target="qwen-apiKey">显示</button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WordVoice 设置</title>
+    <link rel="stylesheet" href="options.css" />
+    <link rel="stylesheet" href="../lib/ui.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>WordVoice 设置</h1>
+      <p class="section-desc">选中文本，按 S 朗读。默认使用浏览器语音，查询与保存同时进行。</p>
+      <form id="settingsForm">
+        <section class="section">
+          <h2>朗读与翻译</h2>
+          <div class="field">
+            <label for="ttsProvider">发音服务</label
+            ><select id="ttsProvider"></select>
+            <p class="hint">
+              浏览器语音启动快。词典原音适用于英文单词。云端发音等待最多 5 秒，随后切换浏览器语音。
+            </p>
           </div>
-          <p class="hint">在阿里云 DashScope 控制台获取</p>
-        </div>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="translation" data-test-provider="qwen">测试连接</button>
-          <div class="test-log" id="log-translation-qwen"></div>
-        </div>
-      </div>
-
-      <!-- 豆包翻译配置 -->
-      <div class="provider-config" id="config-translation-doubao" style="display: none;">
-        <h3>豆包翻译配置</h3>
-        <p class="hint">使用豆包 TTS 的 Access Token</p>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="translation" data-test-provider="doubao">测试连接</button>
-          <div class="test-log" id="log-translation-doubao"></div>
-        </div>
-      </div>
-
-      <!-- MiniMax 翻译配置 -->
-      <div class="provider-config" id="config-translation-minimax" style="display: none;">
-        <h3>MiniMax 翻译配置</h3>
-        <p class="hint">使用 MiniMax TTS 的 API Key</p>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="translation" data-test-provider="minimax">测试连接</button>
-          <div class="test-log" id="log-translation-minimax"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- AI 例句服务商 -->
-    <section class="section">
-      <h2>AI 例句服务</h2>
-      <p class="section-desc">用于生成 AI 例句，需要配置对应服务商的 API Key</p>
-      <div class="provider-cards" id="aiProviderCards">
-        <!-- 动态生成 AI 服务商卡片 -->
-      </div>
-
-      <div class="provider-config" id="config-ai-qwen" style="display: none;">
-        <h3>通义千问 (Qwen) — AI 例句</h3>
-        <div class="field">
-          <label>API Key</label>
-          <div class="password-field">
-            <input type="password" id="ai-qwen-apiKey" placeholder="sk-xxxxxxxxxxxxxxxx">
-            <button class="toggle-btn" data-target="ai-qwen-apiKey">显示</button>
+          <div class="field">
+            <label for="pronunciation">英语口音（浏览器语音与词典原音）</label
+            ><select id="pronunciation">
+              <option value="us">美式英语</option>
+              <option value="uk">英式英语</option>
+            </select>
+            <p class="hint">浏览器会优先使用对应口音的本地语音。云端口音由所选音色决定。</p>
           </div>
-          <p class="hint">在阿里云 DashScope 控制台获取，与翻译服务共享同一 Key</p>
-        </div>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="ai" data-test-provider="qwen">测试连接</button>
-          <div class="test-log" id="log-ai-qwen"></div>
-        </div>
-      </div>
-
-      <div class="provider-config" id="config-ai-doubao" style="display: none;">
-        <h3>豆包 — AI 例句</h3>
-        <div class="field">
-          <label>Access Token</label>
-          <div class="password-field">
-            <input type="password" id="ai-doubao-accessToken" placeholder="访问令牌">
-            <button class="toggle-btn" data-target="ai-doubao-accessToken">显示</button>
+          <div class="field">
+            <label for="speechRate">朗读速度</label
+            ><select id="speechRate">
+              <option value="0.7">0.7× 慢速</option>
+              <option value="0.85">0.85× 稍慢</option>
+              <option value="1">1× 正常</option>
+              <option value="1.25">1.25× 稍快</option>
+              <option value="1.5">1.5× 快速</option>
+            </select>
           </div>
-          <p class="hint">使用火山引擎 Access Token，与 TTS 服务共享</p>
-        </div>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="ai" data-test-provider="doubao">测试连接</button>
-          <div class="test-log" id="log-ai-doubao"></div>
-        </div>
-      </div>
-
-      <div class="provider-config" id="config-ai-minimax" style="display: none;">
-        <h3>MiniMax — AI 例句</h3>
-        <div class="field">
-          <label>API Key</label>
-          <div class="password-field">
-            <input type="password" id="ai-minimax-apiKey" placeholder="API Key">
-            <button class="toggle-btn" data-target="ai-minimax-apiKey">显示</button>
+          <div class="lang-selectors">
+            <div class="field">
+              <label for="sourceLanguage">原文语言</label
+              ><select id="sourceLanguage"></select>
+            </div>
+            <div class="field">
+              <label for="targetLanguage">翻译语言</label
+              ><select id="targetLanguage"></select>
+            </div>
           </div>
-          <p class="hint">在 MiniMax 控制台获取，与 TTS 服务共享</p>
-        </div>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="ai" data-test-provider="minimax">测试连接</button>
-          <div class="test-log" id="log-ai-minimax"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TTS 服务商 -->
-    <section class="section">
-      <h2>TTS 发音服务</h2>
-
-      <!-- TTS 配置摘要 -->
-      <div class="tts-status-card" id="ttsStatusCard">
-        <div class="tts-status-row">
-          <span class="tts-status-label">服务商</span>
-          <span class="tts-status-value" id="ttsStatusProvider">加载中...</span>
-        </div>
-        <div class="tts-status-row">
-          <span class="tts-status-label">音色</span>
-          <span class="tts-status-value" id="ttsStatusVoice">—</span>
-        </div>
-        <div class="tts-status-row">
-          <span class="tts-status-label">口音</span>
-          <span class="tts-status-value" id="ttsStatusAccent">—</span>
-        </div>
-        <div class="tts-status-row">
-          <span class="tts-status-label">状态</span>
-          <span class="tts-status-value" id="ttsStatusState">—</span>
-        </div>
-      </div>
-
-      <div class="provider-cards" id="ttsProviderCards">
-        <!-- 动态生成 TTS 服务商卡片 -->
-      </div>
-
-      <!-- Free Dict 测试 -->
-      <div class="provider-config" id="config-free-dict">
-        <h3>Free Dictionary（免费）</h3>
-        <p class="hint">使用 Free Dictionary API 原始音频，无需配置</p>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="tts" data-test-provider="free-dict">测试连接</button>
-          <div class="test-log" id="log-tts-free-dict"></div>
-        </div>
-      </div>
-
-      <!-- 豆包配置 -->
-      <div class="provider-config" id="config-doubao">
-        <h3>豆包 (火山引擎) 配置</h3>
-        <div class="field">
-          <label>App ID</label>
-          <input type="text" id="doubao-appId" placeholder="火山引擎应用 ID">
-        </div>
-        <div class="field">
-          <label>Access Token</label>
-          <div class="password-field">
-            <input type="password" id="doubao-accessToken" placeholder="访问令牌">
-            <button class="toggle-btn" data-target="doubao-accessToken">显示</button>
+          <div class="field">
+            <label class="checkbox-label"
+              ><input type="checkbox" id="showTranslation" /> 查询并显示翻译</label
+            >
           </div>
-        </div>
-        <div class="field">
-          <label>声音类型</label>
-          <select id="doubao-voiceType">
-            <optgroup label="英文音色（推荐）">
-              <option value="BV056_streaming">BV056 — 英文女声</option>
-              <option value="BV051_streaming">BV051 — 英文男声</option>
-              <option value="BV524_streaming">BV524 — 英文女声 (自然)</option>
-            </optgroup>
-            <optgroup label="中文音色">
-              <option value="BV700_V2_streaming">BV700 — 灿灿 (中文女声)</option>
-              <option value="BV701_streaming">BV701 — 炀炀 (中文男声)</option>
-              <option value="BV123_streaming">BV123 — 阳光青年 (中文男声)</option>
-            </optgroup>
-          </select>
-          <p class="hint">英文单词推荐使用英文音色，发音更地道</p>
-        </div>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="tts" data-test-provider="doubao">测试连接</button>
-          <div class="test-log" id="log-tts-doubao"></div>
-        </div>
-      </div>
-
-      <!-- DashScope 配置 -->
-      <div class="provider-config" id="config-dashscope">
-        <h3>阿里云百炼 (DashScope) 配置</h3>
-        <div class="field">
-          <label>API Key</label>
-          <div class="password-field">
-            <input type="password" id="dashscope-apiKey" placeholder="sk-xxxxxxxxxxxxxxxx">
-            <button class="toggle-btn" data-target="dashscope-apiKey">显示</button>
+          <div class="field">
+            <label for="translationProvider">翻译服务</label
+            ><select id="translationProvider"></select>
+            <p class="hint">免费翻译依赖 Google 网络服务。AI 翻译失败时会尝试免费翻译。</p>
           </div>
-          <p class="hint">在百炼控制台获取，格式为 sk- 开头</p>
-        </div>
-        <div class="field">
-          <label>合成模型</label>
-          <select id="dashscope-model">
-            <optgroup label="CosyVoice（推荐）">
-              <option value="cosyvoice-v3-flash">CosyVoice v3 Flash (1元/万字符)</option>
-              <option value="cosyvoice-v3-plus">CosyVoice v3 Plus (2元/万字符)</option>
-              <option value="cosyvoice-v2">CosyVoice v2 (2元/万字符)</option>
-            </optgroup>
-            <optgroup label="Sambert（旧版）">
-              <option value="sambert-zhiqi-v1">Sambert 知琪 - 温柔女声</option>
-              <option value="sambert-zhinan-v1">Sambert 知楠 - 广告男声</option>
-              <option value="sambert-zhijia-v1">Sambert 知佳 - 标准女声</option>
-            </optgroup>
-          </select>
-        </div>
-        <div class="field">
-          <label>音色</label>
-          <select id="dashscope-voice">
-            <optgroup label="Qwen TTS 英文音色（推荐）">
-              <option value="Ethan">Ethan — 英文男声</option>
-              <option value="Claire">Claire — 英文女声</option>
-              <option value="Olivia">Olivia — 英文女声 (温柔)</option>
-              <option value="Benjamin">Benjamin — 英文男声 (沉稳)</option>
-            </optgroup>
-            <optgroup label="Qwen TTS 中文音色">
-              <option value="Cherry">Cherry — 中文女声</option>
-              <option value="Serena">Serena — 中文女声 (知性)</option>
-              <option value="Chelsie">Chelsie — 中文女声 (温柔)</option>
-            </optgroup>
-            <optgroup label="CosyVoice 音色（仅限 CosyVoice 模型）">
-              <option value="longxiaochun">小春 - 温暖女声</option>
-              <option value="longanyang">安阳 - 自然男声</option>
-              <option value="longxiaoxia">小夏 - 甜美女声</option>
-              <option value="longshu">书 - 知性女声</option>
-              <option value="longcheng">橙 - 阳光男声</option>
-            </optgroup>
-          </select>
-          <p class="hint">英文单词推荐使用 Qwen TTS 英文音色，发音更地道</p>
-        </div>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="tts" data-test-provider="dashscope">测试连接</button>
-          <div class="test-log" id="log-tts-dashscope"></div>
-        </div>
-      </div>
-
-      <!-- MiniMax 配置 -->
-      <div class="provider-config" id="config-minimax">
-        <h3>MiniMax 配置</h3>
-        <div class="field">
-          <label>Group ID</label>
-          <input type="text" id="minimax-groupId" placeholder="MiniMax Group ID">
-        </div>
-        <div class="field">
-          <label>API Key</label>
-          <div class="password-field">
-            <input type="password" id="minimax-apiKey" placeholder="API Key">
-            <button class="toggle-btn" data-target="minimax-apiKey">显示</button>
+          <div class="field">
+            <label for="aiProvider">AI 例句服务</label
+            ><select id="aiProvider"></select>
           </div>
+          <div class="test-area">
+            <button type="button" id="testTts" class="test-btn">试听当前发音</button
+            ><button type="button" id="testTranslation" class="test-btn">测试翻译</button
+            ><button type="button" id="testAi" class="test-btn">测试 AI 例句</button
+            ><button type="button" id="stopSpeech" class="test-btn">停止朗读</button>
+            <div id="testLog" class="test-log" role="status"></div>
+          </div>
+          <p class="hint">
+            测试使用表单中当前填写的值。点击「保存设置」后，网页朗读会使用这些设置。
+          </p>
+        </section>
+        <section class="section">
+          <h2>云端服务配置</h2>
+          <p class="section-desc">按需填写。密钥只保存在当前浏览器中。每个字段只需填写一次。</p>
+          <div id="providerFields"></div>
+        </section>
+        <div class="actions">
+          <button type="submit" id="saveBtn" class="primary-btn" disabled>保存设置</button
+          ><span id="saveStatus" class="save-status" role="status"></span>
         </div>
-        <div class="field">
-          <label>声音 ID</label>
-          <select id="minimax-voiceId">
-            <optgroup label="英文音色（推荐）">
-              <option value="English_expressive_narrator_v2">English Expressive Narrator — 英文叙述</option>
-              <option value="English_Trustworthy_man_v2">English Trustworthy Man — 英文男声</option>
-              <option value="English_gentle_woman_v2">English Gentle Woman — 英文女声</option>
-              <option value="English_sweet_lady_v2">English Sweet Lady — 英文甜美女声</option>
-            </optgroup>
-            <optgroup label="中文音色">
-              <option value="male-qn-qingse">青涩青年 (中文男声)</option>
-              <option value="female-shaonv">少女 (中文女声)</option>
-              <option value="female-yujie">御姐 (中文女声)</option>
-              <option value="male-qn-jingying">精英 (中文男声)</option>
-            </optgroup>
-          </select>
-          <p class="hint">英文单词推荐使用英文音色，发音更地道</p>
-        </div>
-        <div class="test-area">
-          <button class="test-btn" data-test-type="tts" data-test-provider="minimax">测试连接</button>
-          <div class="test-log" id="log-tts-minimax"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 发音日志 -->
-    <section class="section">
-      <h2>最近发音日志</h2>
-      <div id="ttsLogContainer" class="tts-log-container">
-        <p class="hint">暂无发音记录</p>
-      </div>
-      <button id="refreshLogBtn" class="test-btn" style="margin-top: 10px;">刷新日志</button>
-    </section>
-
-    <!-- 缓存管理 -->
-    <section class="section">
-      <h2>缓存管理</h2>
-      <div class="cache-info">
-        <span>音频缓存：<span id="cacheCount">0</span> 条，约 <span id="cacheSize">0</span> KB</span>
-      </div>
-      <button id="clearCacheBtn" class="danger-btn">清除全部音频缓存</button>
-    </section>
-
-    <!-- 快捷键 -->
-    <section class="section">
-      <h2>快捷键</h2>
-      <div class="field">
-        <p>当前快捷键：<kbd>S</kbd> / <kbd>Ctrl+Shift+S</kbd> / <kbd>`</kbd>（选中文本后）</p>
-        <p class="hint">如需修改 Ctrl+Shift+S，请前往 Chrome 快捷键设置</p>
-        <a href="#" id="openShortcuts" class="link-btn">前往修改快捷键</a>
-      </div>
-    </section>
-
-    <div class="actions">
-      <button id="saveBtn" class="primary-btn">保存设置</button>
-      <span id="saveStatus" class="save-status"></span>
-    </div>
-  </div>
-
-  <script type="module" src="options.js"></script>
-</body>
+      </form>
+      <section class="section">
+        <h2>最近发音</h2>
+        <p id="ttsStatus" class="hint">正在加载设置…</p>
+        <div id="ttsLogContainer" class="tts-log-container"></div>
+        <button type="button" id="refreshLogBtn" class="test-btn">刷新日志</button>
+        <p class="hint">耗时记录从收到请求到启动播放的时间。浏览器重启后清空日志。</p>
+      </section>
+      <section class="section">
+        <h2>音频缓存</h2>
+        <p>共 <span id="cacheCount">0</span> 条，约 <span id="cacheSize">0</span> KB</p>
+        <p class="hint">最多缓存 200 段音频，保存 30 天。清理缓存后会重新获取音频，单词本保留。</p>
+        <button type="button" id="clearCacheBtn" class="danger-btn">清除音频缓存</button>
+      </section>
+      <section class="section">
+        <h2>使用帮助</h2>
+        <p>
+          鼠标选中文本后按 <kbd>S</kbd> 或 <kbd>`</kbd> 朗读。按 <kbd>Esc</kbd> 关闭提示并停止朗读。
+        </p>
+        <p>输入框中可以使用浏览器快捷键 <kbd>Ctrl+Shift+S</kbd>。密码字段保留原有输入行为。</p>
+        <p class="hint">
+          每次最多 2000 个字符。Chrome 内部页面、扩展商店和浏览器内置 PDF
+          阅读器限制脚本运行。此类内容可复制到普通网页后选中朗读。
+        </p>
+        <a href="#" id="openShortcuts" class="link-btn">修改浏览器快捷键</a>
+      </section>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
 </html>

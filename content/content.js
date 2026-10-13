@@ -1,335 +1,275 @@
-// WordVoice Content Script
-
-// 记录最后一次选区的视口位置，用于 Toast 定位
-let lastSelectionRect = null;
-
-// 监听来自 background 的消息
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'getSelection') {
-    handleGetSelection();
-    sendResponse({ success: true });
-    return false;
+(() => {
+  // This entry point is also injected after install/update and command recovery.
+  if (globalThis.__wordvoiceV2?.alive) return;
+  globalThis.__wordvoiceV2?.destroy?.();
+  const lifecycle = new AbortController();
+  const { signal } = lifecycle;
+  const state = {
+    alive: true,
+    destroy() {
+      lifecycle.abort();
+      dismiss();
+      state.alive = false;
+    },
+  };
+  globalThis.__wordvoiceV2 = state;
+  let host,
+    shadow,
+    timer,
+    current,
+    lastTriggered = -Infinity,
+    lastText = '';
+  const style = `
+    * { box-sizing: border-box; } .card { width: min(360px, calc(100vw - 24px)); max-height: min(480px, calc(100vh - 24px)); overflow: auto; padding: 16px; color: #eff4ff; background: #182336; border: 1px solid #506787; border-radius: 14px; box-shadow: 0 8px 32px #0005; font: 14px/1.5 system-ui, sans-serif; text-align: left; }
+    .head { display: flex; align-items: flex-start; gap: 12px; } strong { flex: 1; font-size: 17px; overflow-wrap: anywhere; white-space: pre-wrap; } p { margin: 7px 0 0; overflow-wrap: anywhere; } .phonetic { color: #a8c4ef; } .status { color: #b8c8df; font-size: 12px; } .error { color: #ffd296; } .buttons { display: flex; gap: 8px; margin-top: 12px; } button { font: inherit; font-size: 12px; color: #eff4ff; background: #2c4261; border: 1px solid #617999; border-radius: 7px; padding: 5px 10px; cursor: pointer; } button:focus-visible { outline: 2px solid #8ac5ff; outline-offset: 2px; } .close { padding: 1px 7px; } [hidden] { display: none !important; }
+  `;
+  function dismiss() {
+    clearTimeout(timer);
+    host?.remove();
+    host = null;
+    shadow = null;
+    if (current) current.dismissed = true;
   }
-
-  if (message.action === 'showToast') {
-    showToast(message.word, message.isNew, message.frequency, false, message.isSentence, message.translation, message.phonetic, message.ttsSource, message.degradationWarning);
-    sendResponse({ success: true });
-    return false;
+  function setLine(className, text) {
+    const node = shadow?.querySelector(`.${className}`);
+    if (node) {
+      node.textContent = text;
+      node.hidden = !text;
+    }
   }
-
-  // 音频播放（将 data URL 转为 Blob URL 绕过页面 CSP 限制）
-  if (message.action === 'playAudioFallback') {
-    (async () => {
-      try {
-        let audioUrl = message.url;
-        // data URL 转 Blob URL 绕过 CSP
-        if (audioUrl.startsWith('data:')) {
-          const resp = await fetch(audioUrl);
-          const blob = await resp.blob();
-          audioUrl = URL.createObjectURL(blob);
-        }
-        const audio = new Audio(audioUrl);
-        await audio.play();
-        audio.onended = () => {
-          if (audioUrl !== message.url) URL.revokeObjectURL(audioUrl);
-          sendResponse({ success: true });
+  function render() {
+    if (!shadow || !current || current.dismissed) return;
+    setLine('phonetic', current.phonetic || '');
+    setLine('translation', current.translation || current.definition || '');
+    setLine(
+      'status',
+      [
+        current.saved
+          ? `已保存 · 第 ${current.frequency} 次查询`
+          : current.saveError
+            ? '保存失败'
+            : '正在保存…',
+        current.stopped ? '已停止' : current.speech || '正在启动朗读…',
+      ].join(' · '),
+    );
+    setLine(
+      'error',
+      [current.speechError, current.saveError, current.speechWarning, current.lookupWarning]
+        .filter(Boolean)
+        .join('；'),
+    );
+    if (current.lookupDone && (current.speaking || current.speechError || current.stopped)) {
+      clearTimeout(timer);
+      timer = setTimeout(dismiss, 12000);
+    }
+    position();
+  }
+  function position() {
+    if (!host) return;
+    const rect = current?.rect;
+    const box = host.getBoundingClientRect();
+    let left = rect ? rect.left + rect.width / 2 - box.width / 2 : innerWidth - box.width - 16;
+    let top = rect ? rect.bottom + 10 : innerHeight - box.height - 16;
+    if (rect && top + box.height > innerHeight - 12) top = rect.top - box.height - 10;
+    host.style.setProperty(
+      'left',
+      `${Math.max(12, Math.min(left, innerWidth - box.width - 12))}px`,
+      'important',
+    );
+    host.style.setProperty(
+      'top',
+      `${Math.max(12, Math.min(top, innerHeight - box.height - 12))}px`,
+      'important',
+    );
+  }
+  function show(text, rect) {
+    dismiss();
+    host = document.createElement('wordvoice-popup');
+    // Keep the reset and the coordinates in the same style scope. An !important
+    // :host reset would override outer inline left/top and leave the popup at its static position.
+    host.style.cssText =
+      'all: initial !important; position: fixed !important; z-index: 2147483647 !important; display: block !important;';
+    shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `<style>${style}</style><div class="card" role="region" aria-label="WordVoice 选词结果"><div class="head"><strong></strong><button class="close" aria-label="关闭">×</button></div><div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p><p class="status">正在启动朗读…</p><p class="error" hidden></p></div><div class="buttons"><button class="replay">再读一次</button><button class="stop">停止朗读</button></div></div>`;
+    shadow.querySelector('strong').textContent = text;
+    shadow.querySelector('.close').onclick = dismiss;
+    shadow.querySelector('.stop').onclick = () => {
+      chrome.runtime.sendMessage({ action: 'stopSpeech' }).catch(() => {});
+      if (current) {
+        current.stopped = true;
+        render();
+      }
+    };
+    shadow.querySelector('.replay').onclick = () => {
+      if (current) start(current.text, current.rect, current.sentence);
+    };
+    host.addEventListener('mouseenter', () => clearTimeout(timer));
+    host.addEventListener('mouseleave', () => {
+      clearTimeout(timer);
+      timer = setTimeout(dismiss, 12000);
+    });
+    (document.body || document.documentElement).appendChild(host);
+  }
+  function fail(text) {
+    show('WordVoice', null);
+    current = { dismissed: false, rect: null };
+    setLine('status', '');
+    setLine('error', text);
+    position();
+    timer = setTimeout(dismiss, 8000);
+  }
+  async function start(raw, rect, sentence = '') {
+    if (!chrome.runtime?.id) {
+      fail('扩展已更新，请刷新当前网页后重试');
+      return;
+    }
+    const text = raw.replace(/\s+/gu, ' ').trim();
+    if (!text) {
+      fail('请先用鼠标选中文本，再按 S');
+      return;
+    }
+    if (text.length > 2000) {
+      fail('每次最多朗读 2000 个字符，请缩短选区');
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    show(text, rect);
+    current = { requestId, text, rect, sentence, dismissed: false };
+    render();
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'pronounce',
+        requestId,
+        word: text,
+        sentence,
+        pageUrl: location.href,
+        pageTitle: document.title,
+      });
+      if (current?.requestId !== requestId || current.dismissed) return;
+      if (!response?.success) {
+        current.speechError = response?.error || '请求失败，请重试';
+        current.lookupDone = true;
+        render();
+      }
+    } catch {
+      if (current?.requestId === requestId) fail('连接已中断，请刷新当前网页后重试');
+    }
+  }
+  function focusedElement() {
+    let el = document.activeElement;
+    while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+    return el;
+  }
+  function editable(event) {
+    const elements = event ? event.composedPath() : [focusedElement()];
+    return elements.some(
+      (el) =>
+        el instanceof Element &&
+        (el.matches('input, textarea, select, [role="textbox"], [role="combobox"]') ||
+          el.isContentEditable),
+    );
+  }
+  function selectionData(allowInput) {
+    const focused = focusedElement();
+    if (allowInput && focused?.matches('input, textarea')) {
+      if (focused.type === 'password') return null;
+      const start = focused.selectionStart;
+      const end = focused.selectionEnd;
+      if (typeof start === 'number' && end > start)
+        return {
+          text: focused.value.slice(start, end),
+          rect: focused.getBoundingClientRect(),
+          sentence: '',
         };
-        audio.onerror = () => sendResponse({ success: false });
-      } catch (e) {
-        sendResponse({ success: false, error: e.message });
-      }
-    })();
-    return true;
-  }
-});
-
-// 获取选中文本并发送发音请求
-function handleGetSelection() {
-  // 扩展重载后 content script 断连，提示刷新
-  if (!chrome.runtime?.id) {
-    showToast('扩展已更新，请刷新页面', false, 0, true);
-    return;
-  }
-
-  const selection = window.getSelection();
-  const selectedText = selection?.toString().trim();
-
-  if (!selectedText) {
-    lastSelectionRect = null;
-    showToast('请先选中文本', false, 0, true);
-    return;
-  }
-
-  // 捕获选区位置用于 Toast 定位
-  if (selection.rangeCount > 0) {
-    lastSelectionRect = selection.getRangeAt(0).getBoundingClientRect();
-  }
-
-  // 获取选中文本所在的句子上下文
-  const sentence = getSelectionContext(selection);
-
-  // 发送发音请求到 background
-  chrome.runtime.sendMessage({
-    action: 'pronounce',
-    word: selectedText,
-    sentence: sentence,
-    pageUrl: window.location.href,
-    pageTitle: document.title
-  }).catch(error => {
-    console.error('Failed to send pronounce message:', error);
-  });
-
-  // 添加高亮效果
-  highlightSelection(selection);
-}
-
-// 获取选中文本的上下文句子
-function getSelectionContext(selection) {
-  if (!selection || selection.rangeCount === 0) return '';
-
-  const range = selection.getRangeAt(0);
-  const container = range.commonAncestorContainer;
-
-  // 获取父元素的文本内容
-  let parentText = '';
-  if (container.nodeType === Node.TEXT_NODE) {
-    parentText = container.parentElement?.textContent || '';
-  } else {
-    parentText = container.textContent || '';
-  }
-
-  // 尝试提取包含选中文本的句子
-  const selectedText = selection.toString().trim();
-  const sentences = parentText.split(/[.!?。！？]/);
-
-  for (const sentence of sentences) {
-    if (sentence.includes(selectedText)) {
-      return sentence.trim();
+      return null;
     }
-  }
-
-  // 如果找不到完整句子，返回前后 100 个字符
-  const fullText = parentText;
-  const index = fullText.indexOf(selectedText);
-  if (index !== -1) {
-    const start = Math.max(0, index - 50);
-    const end = Math.min(fullText.length, index + selectedText.length + 50);
-    return fullText.substring(start, end).trim();
-  }
-
-  return selectedText;
-}
-
-// 高亮选中文本
-function highlightSelection(selection) {
-  if (!selection || selection.rangeCount === 0) return;
-
-  const range = selection.getRangeAt(0);
-
-  // 创建高亮 span
-  const highlight = document.createElement('span');
-  highlight.className = 'wordvoice-highlight';
-
-  try {
-    range.surroundContents(highlight);
-
-    // 1秒后移除高亮
-    setTimeout(() => {
-      const parent = highlight.parentNode;
-      if (parent) {
-        while (highlight.firstChild) {
-          parent.insertBefore(highlight.firstChild, highlight);
-        }
-        parent.removeChild(highlight);
-      }
-    }, 1000);
-  } catch (e) {
-    // 如果 surroundContents 失败（跨元素选择），忽略高亮
-    console.log('Could not highlight selection');
-  }
-}
-
-// 显示 Toast 提示
-function showToast(word, isNew, frequency, isError = false, isSentence = false, translation = '', phonetic = '', ttsSource = '', degradationWarning = false) {
-  // 移除已有的 toast 和滚动监听
-  dismissToast();
-
-  const toast = document.createElement('div');
-  toast.className = 'wordvoice-toast';
-
-  // TTS 来源信息（底部小字）
-  const sourceHtml = ttsSource
-    ? `<div class="wordvoice-toast-source">${degradationWarning ? '⚠ ' : '🔊 '}${escapeHtml(ttsSource)}</div>`
-    : '';
-
-  if (isError) {
-    toast.innerHTML = `<span class="wordvoice-toast-icon">&#9888;</span> ${word}`;
-    toast.classList.add('wordvoice-toast-error');
-  } else if (isSentence) {
-    const statusText = isNew ? '已收录' : (frequency > 0 ? `第 ${frequency} 次` : '朗读中');
-    const translationHtml = translation
-      ? `<div class="wordvoice-toast-translation">${escapeHtml(translation)}</div>`
-      : '';
-    toast.innerHTML = `
-      <span class="wordvoice-toast-icon">&#9834;</span>
-      <div class="wordvoice-toast-body">
-        <div class="wordvoice-toast-row">
-          <span class="wordvoice-toast-word">${escapeHtml(word)}</span>
-          <span class="wordvoice-toast-status">${statusText}</span>
-        </div>
-        ${translationHtml}
-        ${sourceHtml}
-      </div>
-    `;
-  } else {
-    const statusText = isNew ? '已添加' : `第 ${frequency} 次`;
-    const phoneticHtml = phonetic
-      ? `<div class="wordvoice-toast-phonetic">${escapeHtml(phonetic)}</div>`
-      : '';
-    const translationHtml = translation
-      ? `<div class="wordvoice-toast-translation">${escapeHtml(translation)}</div>`
-      : '';
-    toast.innerHTML = `
-      <span class="wordvoice-toast-icon">&#9834;</span>
-      <div class="wordvoice-toast-body">
-        <div class="wordvoice-toast-row">
-          <span class="wordvoice-toast-word">${escapeHtml(word)}</span>
-          <span class="wordvoice-toast-status">${statusText}</span>
-        </div>
-        ${phoneticHtml}
-        ${translationHtml}
-        ${sourceHtml}
-      </div>
-    `;
-  }
-
-  document.body.appendChild(toast);
-
-  // 定位 Toast：跟随选区或回退到右下角
-  const hasSelectionPos = lastSelectionRect && lastSelectionRect.width > 0;
-  const isAbove = positionToast(toast, lastSelectionRect);
-  if (hasSelectionPos) {
-    toast.classList.add(isAbove ? 'wordvoice-toast--above' : 'wordvoice-toast--below');
-  }
-
-  // 滚动时自动关闭
-  const onScroll = () => dismissToast();
-  window.addEventListener('scroll', onScroll, { once: true, passive: true });
-
-  // 有翻译时显示久一点
-  const duration = translation ? 3000 : 2500;
-  setTimeout(() => {
-    window.removeEventListener('scroll', onScroll);
-    const existing = document.querySelector('.wordvoice-toast');
-    if (existing) {
-      existing.classList.add('wordvoice-toast-fadeout');
-      setTimeout(() => existing.remove(), 300);
+    const selection = getSelection();
+    const text = selection?.toString().trim();
+    if (!text || !selection.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    let parent = range.commonAncestorContainer;
+    if (parent.nodeType === Node.TEXT_NODE) parent = parent.parentElement;
+    let context = text;
+    if (
+      parent &&
+      !['BODY', 'HTML'].includes(parent.tagName) &&
+      parent.textContent.length <= 12000
+    ) {
+      const full = parent.textContent.replace(/\s+/gu, ' ');
+      const pos = full.indexOf(text);
+      if (pos >= 0) context = full.slice(Math.max(0, pos - 180), pos + text.length + 180);
     }
-  }, duration);
-}
-
-// 关闭当前 Toast
-function dismissToast() {
-  const existing = document.querySelector('.wordvoice-toast');
-  if (existing) existing.remove();
-}
-
-// 计算 Toast 位置：跟随选区定位
-function positionToast(toast, selectionRect) {
-  const GAP = 10;
-  const EDGE_PADDING = 12;
-
-  // 无选区信息时回退到右下角
-  if (!selectionRect || selectionRect.width === 0) {
-    toast.style.bottom = '28px';
-    toast.style.right = '28px';
-    toast.style.top = 'auto';
-    toast.style.left = 'auto';
+    return { text, rect: range.getBoundingClientRect(), sentence: context.slice(0, 2000) };
+  }
+  function trigger(allowInput = false) {
+    const selection = selectionData(allowInput);
+    if (!selection) {
+      if (allowInput) fail('请先选中文本');
+      return;
+    }
+    const now = performance.now();
+    if (selection.text === lastText && now - lastTriggered < 180) return;
+    lastTriggered = now;
+    lastText = selection.text;
+    start(selection.text, selection.rect, selection.sentence);
+  }
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      if (!chrome.runtime?.id) {
+        state.destroy();
+        return;
+      }
+      if (event.key === 'Escape' && host) {
+        dismiss();
+        chrome.runtime.sendMessage({ action: 'stopSpeech' }).catch(() => {});
+        return;
+      }
+      if (
+        event.repeat ||
+        event.isComposing ||
+        event.keyCode === 229 ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        editable(event)
+      )
+        return;
+      if (!['s', '`'].includes(event.key.toLowerCase()) || !getSelection()?.toString().trim())
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      trigger();
+    },
+    { capture: true, signal },
+  );
+  window.addEventListener(
+    'scroll',
+    (event) => {
+      if (!event.composedPath().includes(host)) dismiss();
+    },
+    { capture: true, passive: true, signal },
+  );
+  window.addEventListener('resize', position, { passive: true, signal });
+  window.addEventListener('pagehide', dismiss, { signal });
+  chrome.runtime.onMessage.addListener((message, sender, respond) => {
+    if (!state.alive || sender.id !== chrome.runtime.id) return false;
+    if (message.action === 'getSelection') {
+      // Only the focused frame handles a browser command; no local duplicate Ctrl+Shift+S listener.
+      if (document.hasFocus() && !document.activeElement?.matches('iframe, frame')) trigger(true);
+      respond({ success: true });
+      return false;
+    }
+    if (
+      message.action === 'lookupUpdate' &&
+      current?.requestId === message.requestId &&
+      !current.dismissed
+    ) {
+      Object.assign(current, message);
+      render();
+      respond({ success: true });
+    }
     return false;
-  }
-
-  // 先让浏览器计算 toast 尺寸
-  const toastRect = toast.getBoundingClientRect();
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-
-  // 垂直方向：优先下方，空间不足则上方
-  const spaceBelow = vh - selectionRect.bottom - GAP;
-  const spaceAbove = selectionRect.top - GAP;
-  let top;
-  let isAbove = false;
-
-  if (spaceBelow >= toastRect.height + EDGE_PADDING) {
-    top = selectionRect.bottom + GAP;
-  } else if (spaceAbove >= toastRect.height + EDGE_PADDING) {
-    top = selectionRect.top - GAP - toastRect.height;
-    isAbove = true;
-  } else {
-    // 两边都不够，选空间更大的一边
-    if (spaceAbove > spaceBelow) {
-      top = selectionRect.top - GAP - toastRect.height;
-      isAbove = true;
-    } else {
-      top = selectionRect.bottom + GAP;
-    }
-  }
-
-  // 水平方向：居中对齐选区
-  let left = selectionRect.left + (selectionRect.width - toastRect.width) / 2;
-
-  // 边界钳制
-  left = Math.max(EDGE_PADDING, Math.min(left, vw - toastRect.width - EDGE_PADDING));
-  top = Math.max(EDGE_PADDING, Math.min(top, vh - toastRect.height - EDGE_PADDING));
-
-  toast.style.top = `${top}px`;
-  toast.style.left = `${left}px`;
-  toast.style.bottom = 'auto';
-  toast.style.right = 'auto';
-
-  return isAbove;
-}
-
-// HTML 转义
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// 检查是否在输入框中
-function isInputFocused() {
-  const activeElement = document.activeElement;
-  const tagName = activeElement?.tagName?.toLowerCase();
-  return tagName === 'input' || tagName === 'textarea' || activeElement?.isContentEditable;
-}
-
-// 支持多种快捷键方式
-document.addEventListener('keydown', (e) => {
-  const key = e.key.toLowerCase();
-  const hasSelection = window.getSelection()?.toString().trim().length > 0;
-
-  // 方式1: 单按 S 键（有选中文本 + 不在输入框中）
-  if (key === 's' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
-    if (hasSelection && !isInputFocused()) {
-      e.preventDefault();
-      handleGetSelection();
-      return;
-    }
-  }
-
-  // 方式2: Ctrl+Shift+S（任何情况下都可用）
-  if (e.ctrlKey && e.shiftKey && key === 's') {
-    e.preventDefault();
-    handleGetSelection();
-    return;
-  }
-
-  // 方式3: 反引号 ` 键（有选中文本 + 不在输入框中）
-  if ((key === '`' || e.code === 'Backquote') && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    if (hasSelection && !isInputFocused()) {
-      e.preventDefault();
-      handleGetSelection();
-      return;
-    }
-  }
-});
+  });
+})();

@@ -1,421 +1,293 @@
-// WordVoice Service Worker
-
 import db from '../lib/db.js';
 import tts from '../lib/tts.js';
-import { translateWord, getDefinitionSummary } from '../lib/translate.js';
-import { getSettings, saveSettings } from '../lib/settings.js';
+import { fetchWordData } from '../lib/lookup.js';
+import { translateWord, translateDirect } from '../lib/translate.js';
+import { getSettings, saveSettings, PROVIDER_LIST, normalizeSettings } from '../lib/settings.js';
 import { generateSentences } from '../lib/ai-sentences.js';
-import { getProviderAudio } from '../lib/tts-providers.js';
+import { complete } from '../lib/llm.js';
+import { normalizeText, getTextType, textField, safePageUrl } from '../lib/text.js';
 
-// 监听快捷键命令
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command === 'pronounce-selection') {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
-
-    try {
-      chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
-    } catch (error) {
-      console.error('Failed to send message to content script:', error);
-    }
+function notifyViews() {
+  chrome.runtime.sendMessage({ action: 'dataChanged' }).catch(() => {});
+}
+function sendUpdate(sender, requestId, update) {
+  if (!sender.tab?.id) return Promise.resolve();
+  const target = sender.documentId
+    ? { documentId: sender.documentId }
+    : { frameId: sender.frameId || 0 };
+  return chrome.tabs
+    .sendMessage(sender.tab.id, { action: 'lookupUpdate', requestId, ...update }, target)
+    .catch(() => {});
+}
+async function handlePronounce(message, sender) {
+  const word = normalizeText(message.word);
+  const requestId = textField(message.requestId, 100);
+  const settingsPromise = getSettings();
+  // Begin speech immediately. Dictionary, translation and storage never block browser speech.
+  const speechPromise = tts
+    .speak(word)
+    .then(async (result) => {
+      await sendUpdate(sender, requestId, {
+        speech: result.ttsSource.label,
+        speechWarning: result.fallbackReason || '',
+        speaking: true,
+      });
+      return result;
+    })
+    .catch(async (error) => {
+      const cancelled = error.name === 'AbortError';
+      if (cancelled) await sendUpdate(sender, requestId, { stopped: true, speaking: false });
+      else await sendUpdate(sender, requestId, { speechError: error.message, speaking: false });
+      return { error: error.message, cancelled };
+    });
+  const savePromise = db
+    .saveWord(
+      { word },
+      {
+        sentence: textField(message.sentence),
+        pageUrl: safePageUrl(sender.url || message.pageUrl),
+        pageTitle: textField(message.pageTitle, 500),
+      },
+    )
+    .then(async (saved) => {
+      await sendUpdate(sender, requestId, {
+        saved: true,
+        isNew: saved.isNew,
+        frequency: saved.frequency,
+      });
+      notifyViews();
+      return saved;
+    })
+    .catch(async (error) => {
+      await sendUpdate(sender, requestId, { saveError: error.message });
+      return null;
+    });
+  const settings = await settingsPromise;
+  const dictionary =
+    settings.sourceLanguage === 'en' && getTextType(word) === 'word'
+      ? fetchWordData(word, settings.pronunciation).catch(() => ({ definitions: [] }))
+      : Promise.resolve({ definitions: [] });
+  const translation = settings.showTranslation
+    ? translateWord(
+        word,
+        settings.translationProvider,
+        settings.providers[settings.translationProvider] || {},
+        4000,
+        settings.sourceLanguage,
+        settings.targetLanguage,
+      ).catch(() => '')
+    : Promise.resolve('');
+  const [wordData, translated] = await Promise.all([dictionary, translation]);
+  await sendUpdate(sender, requestId, {
+    phonetic: wordData.phonetic || '',
+    translation: translated,
+    definition: wordData.definitions?.[0]?.meaning || '',
+    lookupDone: true,
+    lookupWarning: settings.showTranslation && !translated ? '翻译暂不可用，可稍后重试' : '',
+  });
+  const saved = await savePromise;
+  if (saved) {
+    await db.enrichWord(
+      saved.id,
+      {
+        ...wordData,
+        translation: translated,
+        translationLanguage: translated ? settings.targetLanguage : '',
+      },
+      saved.lastAccessedAt,
+    );
+    notifyViews();
   }
-});
+  const speech = await speechPromise;
+  return { word: saved, isNew: saved?.isNew || false, speech };
+}
 
-// 消息处理器映射表
-const messageHandlers = {
-  // 处理发音请求（返回值已包含 success 字段，需要特殊处理）
-  pronounce: (message, sender) => handlePronounce(message, sender),
-
-  // 获取单词列表（支持 type 筛选）
-  getWords: (message) => {
-    const options = { ...message.options };
-    if (message.type) options.type = message.type;
-    return db.getWords(options).then(words => ({ words }));
+const handlers = {
+  pronounce: handlePronounce,
+  ping: async () => ({}),
+  stopSpeech: () => tts.stopSpeech().then(() => ({})),
+  playOnly: (message) => tts.speak(normalizeText(message.word)).then((speech) => ({ speech })),
+  getWords: (message) => db.queryWords(message.options || {}),
+  searchWords: async (message) => ({ words: await db.searchWords(message.query) }),
+  getStats: async () => ({ stats: await db.getStats() }),
+  getStatsSummary: () => db.getStatsSummary(),
+  getWordWithContexts: async (message) => ({
+    word: await db.getWordWithContexts(validId(message.wordId)),
+  }),
+  deleteWord: async (message) => {
+    await db.deleteWord(validId(message.wordId));
+    notifyViews();
+    return {};
   },
-
-  // 搜索单词
-  searchWords: (message) => db.searchWords(message.query).then(words => ({ words })),
-
-  // 获取统计数据
-  getStats: () => db.getStats().then(stats => ({ stats })),
-
-  // 获取单词详情
-  getWordWithContexts: (message) => db.getWordWithContexts(message.wordId).then(word => ({ word })),
-
-  // 删除单词
-  deleteWord: (message) => db.deleteWord(message.wordId).then(() => ({})),
-
-  // 导出数据
-  exportData: () => db.exportData().then(data => ({ data })),
-
-  // 导入数据
-  importData: (message) => db.importData(message.data).then(stats => ({ stats })),
-
-  // 仅播放发音（不保存）
-  playOnly: (message) => tts.pronounce(message.word).then(() => ({})),
-
-  // 获取设置
-  getSettings: () => getSettings().then(settings => ({ settings })),
-
-  // 保存设置
-  saveSettings: (message) => saveSettings(message.settings).then(() => ({})),
-
-  // 获取待复习单词
-  getWordsForReview: (message) => db.getWordsForReview(message.limit).then(words => ({ words })),
-
-  // 更新单词掌握度
-  updateMastery: (message) => db.updateMastery(message.wordId, message.mastery).then(() => ({})),
-
-  // 获取每日新增统计
-  getDailyStats: (message) => db.getDailyStats(message.days).then(daily => ({ daily })),
-
-  // 获取掌握度分布
-  getMasteryStats: () => db.getMasteryStats().then(mastery => ({ mastery })),
-
-  // 翻译单词
+  exportData: async () => ({ data: await db.exportData() }),
+  importData: async (message) => {
+    const stats = await db.importData(message.data);
+    notifyViews();
+    return { stats };
+  },
+  getWordsForReview: async (message) => ({ words: await db.getWordsForReview(message.limit) }),
+  updateMastery: async (message) => {
+    await db.updateMastery(validId(message.wordId), message.mastery);
+    notifyViews();
+    return {};
+  },
+  getSettings: async () => ({ settings: await getSettings() }),
+  saveSettings: async (message) => {
+    await saveSettings(message.settings);
+    return {};
+  },
   translateWord: async (message) => {
     const settings = await getSettings();
-    const provider = settings.translationProvider || 'google';
-    const config = settings.providers?.[provider] || {};
-    const sourceLang = settings.sourceLanguage || 'en';
-    const targetLang = settings.targetLanguage || 'zh-CN';
-    const translation = await translateWord(message.word, provider, config, 3000, sourceLang, targetLang);
+    if (!settings.showTranslation) return { translation: '' };
+    const word = normalizeText(message.word);
+    const translation = await translateWord(
+      word,
+      settings.translationProvider,
+      settings.providers[settings.translationProvider] || {},
+      4000,
+      settings.sourceLanguage,
+      settings.targetLanguage,
+    );
+    if (message.wordId) {
+      const existing = await db.getWordWithContexts(validId(message.wordId));
+      if (existing?.word === word.toLowerCase()) {
+        await db.enrichWord(existing.id, {
+          translation,
+          translationLanguage: settings.targetLanguage,
+        });
+        notifyViews();
+      }
+    }
     return { translation };
   },
-
-  // 测试 API 连接（返回详细日志）
-  testApi: async (message) => {
-    const { type, provider, config } = message;
-    const testWord = 'hello';
-    const logs = [];
-    const startTime = Date.now();
-
-    const log = (level, msg, data) => {
-      logs.push({ time: Date.now() - startTime, level, msg, data: data ?? null });
-    };
-
-    try {
-      if (type === 'translation') {
-        log('info', `翻译测试 [${provider}]`, { word: testWord });
-
-        if (provider === 'google') {
-          const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${testWord}`;
-          log('req', 'GET ' + url.substring(0, 80) + '...');
-          const resp = await fetch(url);
-          const raw = await resp.json();
-          const translation = raw?.[0]?.[0]?.[0] || '';
-          log('res', `HTTP ${resp.status}`, { translation, raw_snippet: JSON.stringify(raw).substring(0, 200) });
-          return { logs, result: translation, model: 'Google Translate (免费)' };
-        }
-
-        // Qwen / Doubao / MiniMax — LLM 翻译
-        const endpoints = {
-          qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-turbo', keyField: 'apiKey', authPrefix: 'Bearer' },
-          doubao: { url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-lite-32k', keyField: 'accessToken', authPrefix: 'Bearer' },
-          minimax: { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-Text-01', keyField: 'apiKey', authPrefix: 'Bearer' }
-        };
-
-        const ep = endpoints[provider];
-        if (!ep) throw new Error('未知翻译服务商: ' + provider);
-
-        const key = config[ep.keyField];
-        if (!key) throw new Error(`未配置 ${ep.keyField}，请填写后重试`);
-
-        log('req', `POST ${ep.url}`, { model: ep.model, key_preview: key.substring(0, 8) + '***' });
-        const resp = await fetch(ep.url, {
-          method: 'POST',
-          headers: { 'Authorization': `${ep.authPrefix} ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: ep.model, messages: [{ role: 'user', content: `将以下英文单词翻译为简洁的中文释义（只输出中文，不超过10个字）：${testWord}` }] })
-        });
-        const data = await resp.json();
-        log('res', `HTTP ${resp.status}`, { body: JSON.stringify(data).substring(0, 500) });
-
-        if (!resp.ok) throw new Error(`API 返回 ${resp.status}: ${JSON.stringify(data).substring(0, 200)}`);
-        const translation = data.choices?.[0]?.message?.content?.trim() || '';
-        if (!translation) throw new Error('API 返回空结果: ' + JSON.stringify(data).substring(0, 300));
-        return { logs, result: translation, model: ep.model };
-
-      } else if (type === 'ai') {
-        log('info', `AI 例句测试 [${provider}]`, { word: testWord });
-
-        const endpoints = {
-          qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-turbo', keyField: 'apiKey' },
-          doubao: { url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-lite-32k', keyField: 'accessToken' },
-          minimax: { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-Text-01', keyField: 'apiKey' }
-        };
-
-        const ep = endpoints[provider];
-        if (!ep) throw new Error('未知 AI 服务商: ' + provider);
-
-        const key = config[ep.keyField];
-        if (!key) throw new Error(`未配置 ${ep.keyField}，请填写后重试`);
-
-        log('req', `POST ${ep.url}`, { model: ep.model, key_preview: key.substring(0, 8) + '***' });
-        const resp = await fetch(ep.url, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: ep.model, messages: [{ role: 'user', content: `Generate 2 short English example sentences using the word "${testWord}". Only output the sentences.` }] })
-        });
-        const data = await resp.json();
-        log('res', `HTTP ${resp.status}`, { body: JSON.stringify(data).substring(0, 500) });
-
-        if (!resp.ok) throw new Error(`API 返回 ${resp.status}: ${JSON.stringify(data).substring(0, 200)}`);
-        const content = data.choices?.[0]?.message?.content?.trim() || '';
-        if (!content) throw new Error('API 返回空结果: ' + JSON.stringify(data).substring(0, 300));
-        return { logs, result: content, model: ep.model };
-
-      } else if (type === 'tts') {
-        log('info', `TTS 测试 [${provider}]`, { text: testWord });
-
-        if (provider === 'free-dict') {
-          const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${testWord}`;
-          log('req', 'GET ' + url);
-          const resp = await fetch(url);
-          const data = await resp.json();
-          const audioUrl = data?.[0]?.phonetics?.find(p => p.audio)?.audio || '';
-          log('res', `HTTP ${resp.status}`, { audioUrl: audioUrl || '(无音频)' });
-          if (!audioUrl) throw new Error('Free Dictionary 未返回音频 URL');
-          return { logs, result: `音频 URL: ${audioUrl}`, model: 'Free Dictionary API' };
-        }
-
-        // DashScope / Doubao / MiniMax TTS
-        const keyCheck = {
-          dashscope: () => config.apiKey ? null : '未配置 API Key',
-          doubao: () => (config.appId && config.accessToken) ? null : '未配置 App ID 或 Access Token',
-          minimax: () => (config.groupId && config.apiKey) ? null : '未配置 Group ID 或 API Key'
-        };
-
-        const missing = keyCheck[provider]?.();
-        if (missing) throw new Error(missing);
-
-        log('req', `调用 ${provider} TTS API`, { config_keys: Object.keys(config).filter(k => config[k]) });
-        const audioData = await getProviderAudio(provider, config, testWord);
-        const audioSize = audioData ? (audioData.length > 100 ? `${Math.round(audioData.length / 1024)}KB` : audioData.length + 'B') : '0B';
-        log('res', '音频数据已返回', { size: audioSize, format: audioData?.substring(0, 30) });
-        return { logs, result: `音频已生成 (${audioSize})`, model: provider };
-
-      } else {
-        throw new Error('未知测试类型: ' + type);
-      }
-    } catch (error) {
-      log('error', error.message);
-      return { logs, error: error.message };
-    }
-  },
-
-  // 获取 TTS 发音日志
-  getTtsLog: () => Promise.resolve({ log: tts.getTtsLog(), degradations: tts.getConsecutiveDegradations() }),
-
-  // 获取当前 TTS 配置摘要
-  getTtsStatus: async () => {
-    const settings = await getSettings();
-    const provider = settings.ttsProvider || 'free-dict';
-    const config = settings.providers?.[provider] || {};
-    const voiceMap = { dashscope: config.voice, doubao: config.voiceType, minimax: config.voiceId };
-    const nameMap = { 'free-dict': 'Free Dictionary', dashscope: 'DashScope (阿里云百炼)', doubao: '豆包 (火山引擎)', minimax: 'MiniMax' };
-    const hasKey = provider === 'free-dict' || (provider === 'doubao' ? (config.appId && config.accessToken) : config.apiKey);
-    return {
-      provider,
-      providerName: nameMap[provider] || provider,
-      voice: voiceMap[provider] || '',
-      pronunciation: settings.pronunciation || 'us',
-      configured: !!hasKey
-    };
-  },
-
-  // 生成 AI 例句
   generateSentences: async (message) => {
     const settings = await getSettings();
-    const provider = settings.aiProvider || 'qwen';
-    const config = settings.providers[provider] || {};
-    // 检查是否配置了 API Key
-    const hasKey = provider === 'doubao' ? config.accessToken : config.apiKey;
-    if (!hasKey) {
-      throw new Error(`请先在设置页面配置 ${provider === 'qwen' ? '通义千问' : provider === 'doubao' ? '豆包' : 'MiniMax'} 的 API Key`);
-    }
-    const sentences = await generateSentences(message.word, provider, config);
+    const sentences = await generateSentences(
+      message.word,
+      settings.aiProvider,
+      settings.providers[settings.aiProvider],
+    );
     return { sentences };
-  }
+  },
+  getTtsLog: async () => ({
+    log: await tts.getTtsLog(),
+    degradations: await tts.getConsecutiveDegradations(),
+  }),
+  getTtsStatus: async () => {
+    const settings = await getSettings();
+    const provider = settings.ttsProvider;
+    const config = settings.providers[provider] || {};
+    return {
+      provider,
+      providerName: PROVIDER_LIST.find((p) => p.id === provider)?.name,
+      voice: config.voice || config.voiceType || config.voiceId || '',
+      pronunciation: settings.pronunciation,
+      configured:
+        ['chrome-tts', 'free-dict'].includes(provider) ||
+        (provider === 'doubao' ? !!(config.appId && config.accessToken) : !!config.apiKey),
+    };
+  },
+  testApi: async (message) => {
+    const { type, provider, config = {} } = message;
+    const settings = normalizeSettings({ ...(await getSettings()), ...message.preferences });
+    const start = Date.now();
+    try {
+      let result;
+      if (type === 'tts') {
+        settings.ttsProvider = provider;
+        settings.providers[provider] = config;
+        result = (
+          await tts.speak(
+            provider === 'free-dict' ? 'hello' : 'Hello, welcome to WordVoice.',
+            settings,
+            { strict: true },
+          )
+        ).ttsSource.label;
+        // Dictionary audio needs a single word.
+      } else if (type === 'translation') {
+        result = await translateDirect(
+          'Hello. Welcome to WordVoice.',
+          provider,
+          config,
+          8000,
+          settings.sourceLanguage,
+          settings.targetLanguage,
+        );
+      } else if (type === 'ai') {
+        result = await complete(
+          provider,
+          config,
+          'Write one short English sentence using the word provided. Output only the sentence.',
+          'hello',
+        );
+      } else throw new Error('无效的测试类型');
+      return {
+        result,
+        model: config.textModel || config.model || provider,
+        logs: [
+          {
+            time: Date.now() - start,
+            level: 'info',
+            msg: type === 'tts' ? '音频已开始播放' : '服务已返回结果',
+          },
+        ],
+      };
+    } catch (error) {
+      return { error: error.message, logs: [] };
+    }
+  },
 };
-
-// 监听来自 content script 和 popup 的消息
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // 查找对应的处理器
-  const handler = messageHandlers[message.action];
-  if (!handler) {
-    sendResponse({ success: false, error: `Unknown action: ${message.action}` });
+function validId(value) {
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error('无效的词条 ID');
+  return value;
+}
+const contentActions = new Set(['pronounce', 'stopSpeech', 'ping']);
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (message?.target === 'offscreen' || message?.action === 'dataChanged') return false;
+  if (sender.id !== chrome.runtime.id) return false;
+  if (!message || !Object.hasOwn(handlers, message.action)) {
+    respond({ success: false, error: '未知操作' });
     return false;
   }
-
-  // 执行处理器并统一处理响应
-  handler(message, sender)
-    .then(result => {
-      // pronounce 的返回值已包含 success 字段，直接返回
-      if (message.action === 'pronounce') {
-        sendResponse(result);
-      } else {
-        // 其他 handler 需要包装 success 字段
-        sendResponse({ success: true, ...result });
-      }
-    })
-    .catch(error => {
-      sendResponse({ success: false, error: error.message });
-    });
-
+  const isExtensionPage = sender.url?.startsWith(chrome.runtime.getURL(''));
+  if (!isExtensionPage && !contentActions.has(message.action)) {
+    respond({ success: false, error: '请在扩展页面执行此操作' });
+    return false;
+  }
+  Promise.resolve()
+    .then(() => handlers[message.action](message, sender))
+    .then((result) => respond({ success: true, ...result }))
+    .catch((error) => respond({ success: false, error: error.message || '操作失败，请重试' }));
   return true;
 });
 
-// 识别文本类型：word / phrase / sentence
-function getTextType(text) {
-  const trimmed = text.trim();
-  const wordCount = trimmed.split(/\s+/).length;
-  if (wordCount === 1 && /^[a-zA-Z]+(?:[-'][a-zA-Z]+)*$/.test(trimmed)) return 'word';
-  if (wordCount <= 5) return 'phrase';
-  return 'sentence';
+async function inject(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: ['content/content.js'],
+  });
 }
-
-// 判断是否为英文文本
-function isEnglishText(text) {
-  return /[a-zA-Z]/.test(text);
-}
-
-// 处理发音请求
-async function handlePronounce(message, sender) {
-  const { word, sentence, pageUrl, pageTitle } = message;
-
-  if (!word || word.trim().length === 0) {
-    return { success: false, error: '请先选中文本' };
-  }
-
-  const cleanText = word.trim();
-
-  if (!isEnglishText(cleanText)) {
-    return { success: false, error: '仅支持英文文本' };
-  }
-
+chrome.commands.onCommand.addListener(async (command, commandTab) => {
+  if (command !== 'pronounce-selection') return;
   try {
-    const textType = getTextType(cleanText);
-    const settings = await getSettings();
-    const providerConfig = settings.providers[settings.translationProvider] || {};
-    const sourceLang = settings.sourceLanguage || 'en';
-    const targetLang = settings.targetLanguage || 'zh-CN';
-
-    if (textType === 'word') {
-      // === 单词模式：查字典 + 翻译 + TTS + 保存 ===
-      const [wordData, translation] = await Promise.all([
-        tts.pronounce(cleanText),
-        settings.showTranslation
-          ? translateWord(cleanText, settings.translationProvider, providerConfig, 3000, sourceLang, targetLang).catch(() => '')
-          : Promise.resolve('')
-      ]);
-
-      // 降级处理：如果翻译为空，使用 Free Dictionary 的英文释义
-      let finalTranslation = translation;
-      if (settings.showTranslation && !finalTranslation && wordData.definitions?.length > 0) {
-        finalTranslation = getDefinitionSummary(wordData.definitions);
-      }
-
-      // 保存单词（含中文翻译和类型）
-      const savedWord = await db.saveWord({ ...wordData, translation: finalTranslation, type: 'word' });
-
-      // 保存上下文
-      if (savedWord.id && (sentence || pageUrl)) {
-        await db.addContext({
-          wordId: savedWord.id,
-          sentence: sentence || '',
-          pageUrl: pageUrl || '',
-          pageTitle: pageTitle || ''
-        });
-      }
-
-      // 显示反馈（带翻译、音标和 TTS 来源）
-      if (sender.tab?.id) {
-        chrome.tabs.sendMessage(sender.tab.id, {
-          action: 'showToast',
-          word: cleanText,
-          isNew: savedWord.isNew,
-          frequency: savedWord.frequency,
-          translation: finalTranslation || '',
-          phonetic: wordData.phonetic || '',
-          ttsSource: wordData.ttsSource?.label || '',
-          degradationWarning: wordData.degradationWarning || false
-        }).catch(() => {});
-      }
-
-      return { success: true, word: savedWord, isNew: savedWord.isNew };
-
-    } else {
-      // === 短语/句子模式：TTS 朗读 + 翻译 + 保存 ===
-      const [speakResult, translation] = await Promise.all([
-        tts.speakSentence(cleanText),
-        settings.showTranslation
-          ? translateWord(cleanText, settings.translationProvider, providerConfig, 5000, sourceLang, targetLang).catch(() => '')
-          : Promise.resolve('')
-      ]);
-
-      // 保存到单词本（含类型）
-      const savedWord = await db.saveWord({
-        word: cleanText,
-        translation: translation || '',
-        type: textType
-      });
-
-      // 保存上下文
-      if (savedWord.id && (sentence || pageUrl)) {
-        await db.addContext({
-          wordId: savedWord.id,
-          sentence: sentence || '',
-          pageUrl: pageUrl || '',
-          pageTitle: pageTitle || ''
-        });
-      }
-
-      // 显示反馈（短语/句子显示翻译，不显示音标/词性）
-      const displayText = cleanText.length > 40 ? cleanText.substring(0, 40) + '...' : cleanText;
-      if (sender.tab?.id) {
-        chrome.tabs.sendMessage(sender.tab.id, {
-          action: 'showToast',
-          word: displayText,
-          isNew: savedWord.isNew,
-          frequency: savedWord.frequency,
-          isSentence: true,
-          translation: translation || '',
-          ttsSource: speakResult?.ttsSource?.label || '',
-          degradationWarning: speakResult?.degradationWarning || false
-        }).catch(() => {});
-      }
-
-      return { success: true, word: savedWord, isNew: savedWord.isNew, textType };
+    const tab = commandTab || (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+    if (!tab?.id) return;
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
+    } catch {
+      await inject(tab.id);
+      await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
     }
-
-  } catch (error) {
-    console.error('Pronounce error:', error);
-    // 给用户友好的中文提示
-    let friendlyMsg = '发音失败';
-    const msg = error.message || '';
-    if (msg.includes('timeout') || msg.includes('network') || msg.includes('fetch')) {
-      friendlyMsg = '网络连接超时，请检查网络';
-    } else if (msg.includes('API') || msg.includes('401') || msg.includes('403')) {
-      friendlyMsg = 'API 认证失败，请检查设置中的 Key 配置';
-    }
-    return { success: false, error: friendlyMsg };
-  }
-}
-
-// 安装/更新时强制写入完整 API 配置
-chrome.runtime.onInstalled.addListener(async () => {
-  db.open().catch(console.error);
-
-  // 直接用 DEFAULTS 覆盖，确保所有 API Key 写入
-  try {
-    await chrome.storage.sync.remove('settings');
-    const freshSettings = await getSettings(); // 返回 DEFAULTS
-    await saveSettings(freshSettings);
-    console.log('WordVoice: 已写入完整配置，TTS =', freshSettings.ttsProvider);
-  } catch (e) {
-    console.error('自动配置失败:', e);
+  } catch {
+    /* Chrome restricts extension scripts on its own pages and Web Store. */
   }
 });
-
-// 启动时确保数据库就绪
-db.open().catch(console.error);
+chrome.runtime.onInstalled.addListener(() => {
+  (async () => {
+    await getSettings();
+    await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+    await db.open();
+    const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+    await Promise.allSettled(tabs.filter((t) => t.id).map((t) => inject(t.id)));
+  })().catch((error) => console.error('WordVoice initialization:', error.message));
+});

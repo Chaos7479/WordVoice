@@ -3,7 +3,9 @@
    ============================================ */
 
 /* --- Reset & Root Variables --- */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -11,19 +13,19 @@
 
 :root {
   /* Primary — Rose Macaron */
-  --primary: #E8828A;
-  --primary-light: #F0A8AE;
-  --primary-dark: #D06E76;
-  --accent: #B8A0D2;
-  --success: #7EC89A;
-  --warning: #F0C080;
-  --danger: #E88888;
+  --primary: #e8828a;
+  --primary-light: #f0a8ae;
+  --primary-dark: #d06e76;
+  --accent: #b8a0d2;
+  --success: #7ec89a;
+  --warning: #f0c080;
+  --danger: #e88888;
 
   /* Backgrounds — Cream & White */
-  --bg-body: #FFF8F3;
-  --bg-card: #FFFFFF;
-  --bg-card-hover: #FFF2EB;
-  --bg-input: #FEF5F0;
+  --bg-body: #fff8f3;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fff2eb;
+  --bg-input: #fef5f0;
 
   /* Text — Pure black on light */
   --text-primary: #000000;
@@ -151,8 +153,8 @@ h3 {
 }
 
 /* --- Text / Password Inputs --- */
-.field input[type="text"],
-.field input[type="password"],
+.field input[type='text'],
+.field input[type='password'],
 .field select {
   width: 100%;
   padding: 10px 14px;
@@ -166,13 +168,13 @@ h3 {
   outline: none;
 }
 
-.field input[type="text"]::placeholder,
-.field input[type="password"]::placeholder {
+.field input[type='text']::placeholder,
+.field input[type='password']::placeholder {
   color: var(--text-muted);
 }
 
-.field input[type="text"]:focus,
-.field input[type="password"]:focus,
+.field input[type='text']:focus,
+.field input[type='password']:focus,
 .field select:focus {
   border-color: var(--primary);
   background: rgba(22, 22, 42, 0.95);
@@ -225,7 +227,7 @@ h3 {
 }
 
 /* Custom radio button */
-.radio input[type="radio"] {
+.radio input[type='radio'] {
   -webkit-appearance: none;
   appearance: none;
   width: 18px;
@@ -239,16 +241,16 @@ h3 {
   flex-shrink: 0;
 }
 
-.radio input[type="radio"]:hover {
+.radio input[type='radio']:hover {
   border-color: var(--primary-light);
 }
 
-.radio input[type="radio"]:checked {
+.radio input[type='radio']:checked {
   border-color: var(--primary);
   background: transparent;
 }
 
-.radio input[type="radio"]:checked::after {
+.radio input[type='radio']:checked::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -275,7 +277,7 @@ h3 {
   color: var(--primary-light);
 }
 
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   -webkit-appearance: none;
   appearance: none;
   width: 18px;
@@ -289,16 +291,16 @@ h3 {
   flex-shrink: 0;
 }
 
-.checkbox-label input[type="checkbox"]:hover {
+.checkbox-label input[type='checkbox']:hover {
   border-color: var(--primary-light);
 }
 
-.checkbox-label input[type="checkbox"]:checked {
+.checkbox-label input[type='checkbox']:checked {
   border-color: var(--primary);
   background: var(--primary);
 }
 
-.checkbox-label input[type="checkbox"]:checked::after {
+.checkbox-label input[type='checkbox']:checked::after {
   content: '';
   position: absolute;
   top: 2px;
@@ -384,7 +386,9 @@ h3 {
 .provider-card.active {
   border-color: var(--primary);
   background: rgba(232, 130, 138, 0.08);
-  box-shadow: 0 0 20px rgba(232, 130, 138, 0.2), inset 0 0 20px rgba(232, 130, 138, 0.03);
+  box-shadow:
+    0 0 20px rgba(232, 130, 138, 0.2),
+    inset 0 0 20px rgba(232, 130, 138, 0.03);
 }
 
 .provider-card.active::before {
@@ -541,7 +545,7 @@ kbd {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
   opacity: 0;
   transition: opacity 0.25s var(--ease);
 }
@@ -626,9 +630,15 @@ kbd {
 }
 
 @keyframes dots {
-  0% { content: '.'; }
-  33% { content: '..'; }
-  66% { content: '...'; }
+  0% {
+    content: '.';
+  }
+  33% {
+    content: '..';
+  }
+  66% {
+    content: '...';
+  }
 }
 
 .test-log {
@@ -873,4 +883,52 @@ kbd {
 .tts-log-table .log-badge.warn {
   background: rgba(240, 192, 128, 0.15);
   color: var(--warning);
+}
+
+.credential-section {
+  border: 1px solid var(--border, #ccd6df);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.credential-section summary {
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+}
+.credential-section .field {
+  margin-top: 16px;
+}
+.test-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.test-log {
+  width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.container {
+  max-width: 860px;
+}
+.actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 16px;
+  background: #f4f7fc;
+  border: 1px solid #ced6e0;
+  border-radius: 12px;
+}
+@media (max-width: 560px) {
+  .container {
+    padding: 16px;
+  }
+  .lang-selectors {
+    flex-wrap: wrap;
+  }
+  .tts-log-container {
+    overflow-x: auto;
+  }
 }

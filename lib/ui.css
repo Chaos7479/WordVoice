@@ -1,0 +1,120 @@
+#pageStatus {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 2147483647;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #19334d;
+  color: #eef5ff;
+  border: 1px solid #6ca7d1;
+  font:
+    13px/1.5 system-ui,
+    sans-serif;
+  box-shadow: 0 4px 16px #0004;
+  overflow-wrap: anywhere;
+}
+#pageStatus.error {
+  background: #49351e;
+  border-color: #dcb57b;
+}
+[hidden] {
+  display: none !important;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+button:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid #64abeb;
+  outline-offset: 3px;
+}
+.word-text,
+.detail-word-text,
+.flashcard-word,
+.flashcard-back-word {
+  overflow-wrap: anywhere;
+}
+.footer-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.footer-actions button,
+#loadMore,
+#refreshTranslation {
+  background: #e8f1f9;
+  color: #254764;
+  border: 1px solid #a4bbce;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.word-main,
+.word-info,
+.detail-word {
+  min-width: 0;
+}
+.stats-bar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-tabs {
+  overflow-x: auto;
+}
+.filter-tab {
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+:root {
+  --primary: #ad4256;
+  --primary-light: #d76b7d;
+  --primary-dark: #903248;
+  --accent: #75538f;
+  --success: #31794c;
+  --warning: #936522;
+  --danger: #ac3b3b;
+}
+button,
+a,
+[role='button'] {
+  touch-action: manipulation;
+}
+.detail-word-text {
+  font-size: 22px;
+}
+.daily-chart {
+  padding-bottom: 32px;
+}
+.daily-bar-group {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+}
+.daily-bar {
+  min-height: 0;
+  flex-shrink: 0;
+}
+.daily-bar-label {
+  position: absolute;
+  bottom: -24px;
+}
+.daily-bar-group:focus-visible .daily-bar-count {
+  opacity: 1;
+}
+.word-detail {
+  animation-duration: 0.16s;
+}

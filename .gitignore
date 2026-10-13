@@ -31,3 +31,9 @@ agents.json
 
 # 任务归档
 tasks_archive/
+
+# Generated test and release artifacts
+.test-profile-*/
+test-results/
+playwright-report/
+dist/

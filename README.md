@@ -1,235 +1,107 @@
-# WordVoice — 英语发音学习助手
+# WordVoice 2
 
-[English](#english) | [中文](#中文)
+在 Chrome 网页中选中文本，按 **S** 朗读。发音、释义查询和保存同时进行。支持单词、短语、句子，以及本地单词本。
 
----
+## 安装与更新
 
-<a name="中文"></a>
+需要 Chrome 116 或更新版本。安装使用源码目录，无需运行构建工具。
 
-## 🎯 简介
+1. 下载并解压此仓库，或运行 `git clone https://github.com/Chaos7479/WordVoice.git`。
+2. 打开 `chrome://extensions/`，开启「开发者模式」。
+3. 点击「加载已解压的扩展程序」，选择包含 `manifest.json` 的目录。
+4. 在普通网页选中文本，按 **S**。
 
-WordVoice 是一个 Chrome 浏览器扩展，帮助你在浏览网页时随时学习英语发音。选中任意英文单词，按下 **S** 键，即可听到标准发音、查看音标释义和中文翻译，同时自动记录到生词本。
+**已有用户升级：** 先在旧版单词本中导出 JSON 备份。将新版文件放回原安装目录，然后在扩展管理页点击「重新加载」。使用相同目录可以保留扩展 ID、设置和单词本。换到新目录安装时，可以导入备份。升级后扩展会尝试接入已打开的网页；某页仍无响应时，刷新该页。
 
-## ✨ 功能特性
+测试分支的安装方式相同。GitHub Actions 会生成仅包含运行文件的 `WordVoice-extension` 安装包。
 
-**核心功能**
-- 🔊 选中单词按 S 键即刻发音（支持单词、短语、句子）
-- 📖 自动查询音标、词性、英文释义（Free Dictionary API）
-- 🌐 中文翻译（Google Translate 免费 / 通义千问 / 豆包 / MiniMax）
-- 📝 自动记录到生词本，统计查询频率
+## 日常使用
 
-**TTS 发音引擎**
-- 阿里云百炼 DashScope（Qwen3-TTS，多种英文音色）
-- 豆包 / 火山引擎（字节跳动 TTS）
-- MiniMax（多种英文/中文音色）
-- Chrome 内置 TTS（免费兜底）
+| 操作                 | 效果                                                  |
+| -------------------- | ----------------------------------------------------- |
+| 选中文本后按 `S`     | 朗读、查询释义、记录到单词本                          |
+| 选中文本后按反引号   | 同上                                                  |
+| `Ctrl+Shift+S`       | 浏览器快捷键，也支持输入框选区。macOS 使用 Control 键 |
+| 提示框「再读一次」   | 再次朗读，并增加查询次数                              |
+| 「停止朗读」或 `Esc` | 停止当前朗读；Esc 同时关闭网页提示                    |
+| 点击扩展图标         | 最近记录、搜索、朗读、设置和单词本入口                |
+| 单词本               | 按时间、类型、掌握度筛选，搜索原文、翻译与释义        |
+| 词条详情             | 发音、翻译、释义、来源、AI 例句、删除                 |
+| 复习                 | 每轮最多 20 个单词或短语，按认识程度记录进度          |
+| 学习统计             | 今日、本周（周一开始）、14 天趋势和掌握度分布         |
+| 导出 / 导入          | JSON 备份，保留翻译、掌握度、时间和上下文             |
 
-**学习工具**
-- 📇 闪卡复习模式（3 档掌握度：认识 / 模糊 / 不认识）
-- 📊 学习统计（每日新增、掌握度分布、查询频率）
-- 🤖 AI 例句生成（通义千问 / 豆包 / MiniMax）
-- 📤 数据导入导出（JSON 格式）
+单按 S 会保留输入框、编辑器和输入法的原有操作。密码字段保留原有输入行为。快捷键冲突时，在设置页打开 Chrome 快捷键管理并重新分配组合键。
 
-**体验细节**
-- Toast 气泡跟随选中文本定位，显示音标 + 翻译 + 发音来源
-- 音频本地缓存（IndexedDB），避免重复 API 调用
-- 短语/句子智能识别，自动走翻译 + TTS
-- 单词本支持类型筛选（单词 / 短语 / 句子）
+## 发音与服务配置
 
-## 📦 安装
+默认使用 **浏览器语音**。优先选择对应语言和英语口音的本地语音，启动朗读时无需等待网络。语音可用性由操作系统和 Chrome 决定。释义、翻译失败时，已保存的文本仍保留在单词本中。
 
-### 从源码安装
+可选服务：
 
-1. 克隆仓库
+| 服务                      | 用途                   | 配置                                        |
+| ------------------------- | ---------------------- | ------------------------------------------- |
+| 浏览器语音                | 朗读，默认选项         | 语言、英语口音、速度                        |
+| Free Dictionary           | 英文单词原音与词典释义 | 无需密钥。短语和句子使用浏览器语音          |
+| 阿里云百炼                | Qwen3-TTS HTTP 发音    | 中国内地 API Key、模型、音色                |
+| 豆包语音                  | 发音                   | App ID、Access Token、音色 ID               |
+| 火山方舟                  | 翻译与 AI 例句         | 独立的方舟 API Key、模型或推理接入点 ID     |
+| MiniMax                   | 发音、翻译和例句       | 中国内地 API Key、模型、音色；Group ID 可选 |
+| Google Translate 免费接口 | 默认翻译               | 需要可访问该服务的网络                      |
+| 通义千问                  | 翻译与例句             | 中国内地百炼 API Key、文本模型              |
 
-```bash
-git clone https://github.com/Chaos7479/WordVoice.git
+设置中的「试听」「测试翻译」「测试 AI 例句」使用当前表单值。**保存设置**后，网页使用新配置。选中服务或打开单词本会保持安静。用户发起查询、试听或生成例句时才访问对应服务。
+
+云端发音路径设有 5 秒截止时间。服务失败或超时后会尝试浏览器语音。测试按钮直接报告所选服务的结果，便于检查配置。
+
+## 数据与隐私
+
+- 设置和密钥保存在当前 Chrome 配置文件的本地存储中。v1 的同步设置会一次性迁移到本地；升级保留已有设置。
+- 单词、翻译、查询次数、掌握度和网页上下文保存在 IndexedDB 中。
+- 只有用户发起选词查询时，扩展才记录该选区的文本、邻近上下文、网页标题和网址。
+- 查询词典会发送所选单词。启用翻译会把所选文本发送给所选服务；AI 翻译失败时会尝试 Google 免费接口。云端发音和 AI 例句也需要发送对应文本。
+- 浏览器语音优先使用本地语音；缺少本地语音时，Chrome 可能选择联网语音。
+- JSON 导出只包含学习记录，不包含密钥。
+- 扩展使用 HTTP/HTTPS 网站权限监听选区，并在安装或更新后接入已打开的页面。`scripting` 用于接入和修复内容脚本；`offscreen` 用于在扩展页面播放音频；`tts` 用于系统语音；`storage` 用于设置；`sidePanel` 用于单词本。
+
+## 范围与限制
+
+- 每次最多 **2000 个字符**。百炼 Qwen3-TTS 的单次上限为 600 个字符；更长文本使用浏览器语音。
+- Chrome 内部页面、扩展商店和内置 PDF 阅读器限制内容脚本。普通 HTTP/HTTPS 网页和允许脚本的嵌入网页支持选词朗读。
+- 每个词条保留最近 20 条不同上下文；相同网址和句子的重复查询会合并。
+- 音频缓存最多 200 条、约 32 MiB 存储预算、有效期 30 天。释义、翻译和例句缓存合计最多 1000 条、有效期 7 天。
+- 单词本每次显示 100 条，可继续加载。导出包含全部词条。导入支持 25 MB 内、最多 50000 个词条和 100000 条上下文的备份。
+- 重复导入同一备份会合并记录。查询次数采用较大值，避免重复导入放大次数。
+- 网络服务的可用性、音色、模型权限和额度取决于服务商账户。第三方账户需要在设置页测试。
+
+## 开发与验证
+
+运行时使用原生 JavaScript，生产包无第三方 JavaScript 依赖。测试需要 Node.js 24。
+
+```sh
+npm ci
+npm run check
+npm test
+npx playwright install chromium
+npm run test:e2e
+npm run package
 ```
 
-2. 打开 Chrome，地址栏输入 `chrome://extensions/`
-3. 右上角开启「开发者模式」
-4. 点击「加载已解压的扩展程序」
-5. 选择克隆下来的 `WordVoice` 目录
+- `npm test`：数据迁移、事务并发、备份、缓存、网络取消和语音请求控制。
+- `npm run test:e2e`：加载真实 Chrome 扩展，验证网页选词、iframe、页面限制、侧栏、设置、复习和后台停止后的唤醒。
+- 多数浏览器测试使用受控网络响应和模拟系统语音事件，保证离线复现。音频播放测试使用真实 Offscreen Audio 元素。macOS 唤醒测试另用真实系统语音。
+- `npm run package`：在 `dist/` 生成可解压加载的 ZIP。
 
-## ⚙️ 配置
+完整审计与验证记录见 [docs/AUDIT.md](docs/AUDIT.md)。
 
-### 零配置即可使用
+## English
 
-安装后无需任何配置即可使用基础功能：
-- **发音**：Free Dictionary 原生音频 + Chrome 内置 TTS
-- **翻译**：Google Translate（免费）
-- **词典**：Free Dictionary API（免费）
+Select text on a regular Chrome page and press **S** to pronounce it, look it up and save it. WordVoice 2 starts browser speech independently of dictionary and translation requests. New selections interrupt old speech. Cloud audio plays in an extension offscreen document and falls back to browser speech after a bounded timeout.
 
-### 可选：配置第三方 TTS（更自然的发音）
+Load the repository directory containing `manifest.json` through Chrome's **Load unpacked** button. Requires Chrome 116+. No build is required. For upgrades, export a backup first and replace files in the original extension directory to preserve its ID and data.
 
-点击扩展图标 → 右键 → 选项，进入设置页面：
+Includes a searchable vocabulary book, context history, flashcard review, statistics, JSON import/export and optional cloud speech/AI providers. Credentials stay in the current browser profile. Chrome internal pages, the Web Store and the built-in PDF viewer restrict content scripts. Third-party services require network access and, where applicable, valid credentials.
 
-| 服务商 | 需要配置 | 发音质量 |
-|--------|---------|---------|
-| Free Dictionary | 无需配置 | ⭐⭐⭐ |
-| Chrome TTS | 无需配置 | ⭐⭐⭐ |
-| 阿里云百炼 DashScope | API Key | ⭐⭐⭐⭐⭐ |
-| 豆包（火山引擎） | App ID + Access Token | ⭐⭐⭐⭐⭐ |
-| MiniMax | Group ID + API Key | ⭐⭐⭐⭐⭐ |
+## License
 
-## 🎹 快捷键
-
-| 快捷键 | 条件 | 说明 |
-|--------|------|------|
-| `S` | 选中文本 + 不在输入框中 | 发音并保存 |
-| `` ` `` | 选中文本 + 不在输入框中 | 发音并保存 |
-| `Ctrl+Shift+S` | 任意场景 | 发音并保存 |
-
-## 🏗️ 技术栈
-
-- Chrome Extension Manifest V3
-- Vanilla JavaScript（无框架依赖）
-- IndexedDB 本地存储
-- Free Dictionary API
-- Google Translate API（免费）
-- 多 TTS 服务商适配（DashScope / 豆包 / MiniMax）
-- CSS 毛玻璃 + 3D 闪卡动画
-
-## 📁 项目结构
-
-```
-WordVoice/
-├── manifest.json            # 扩展配置
-├── background/
-│   └── service-worker.js    # 后台服务（消息路由、API 调用）
-├── content/
-│   ├── content.js           # 内容脚本（选词、Toast、音频播放）
-│   └── content.css          # Toast 样式
-├── lib/
-│   ├── tts.js               # TTS 发音模块（降级链、缓存）
-│   ├── tts-providers.js     # TTS 服务商适配器
-│   ├── translate.js         # 翻译模块（多服务商 + 降级）
-│   ├── settings.js          # 设置管理
-│   ├── db.js                # IndexedDB 数据库封装
-│   ├── ai-sentences.js      # AI 例句生成
-│   └── utils.js             # 工具函数
-├── popup/                   # 弹出面板（最近单词、快捷搜索）
-├── sidepanel/               # 侧边栏（单词本、复习、统计）
-├── options/                 # 设置页面（TTS/翻译/AI 配置）
-└── assets/icons/            # 扩展图标
-```
-
-## 📄 许可证
-
-MIT License
-
----
-
-<a name="english"></a>
-
-## 🎯 Introduction
-
-WordVoice is a Chrome extension that helps you learn English pronunciation while browsing the web. Select any English word and press **S** to hear its pronunciation, view phonetics and definitions, and get a Chinese translation — all while automatically saving it to your vocabulary book.
-
-## ✨ Features
-
-**Core**
-- 🔊 Select a word and press S for instant pronunciation (words, phrases, sentences)
-- 📖 Auto-lookup: phonetics, part of speech, English definitions (Free Dictionary API)
-- 🌐 Translation (Google Translate free / Qwen / Doubao / MiniMax)
-- 📝 Auto-save to vocabulary book with frequency tracking
-
-**TTS Engines**
-- Alibaba Cloud DashScope (Qwen3-TTS, multiple English voices)
-- Doubao / Volcengine (ByteDance TTS)
-- MiniMax (multiple English/Chinese voices)
-- Chrome built-in TTS (free fallback)
-
-**Learning Tools**
-- 📇 Flashcard review (3 mastery levels: know / fuzzy / don't know)
-- 📊 Statistics (daily new words, mastery distribution, query frequency)
-- 🤖 AI example sentences (Qwen / Doubao / MiniMax)
-- 📤 Data import/export (JSON)
-
-**UX Details**
-- Toast popup follows text selection, shows phonetics + translation + TTS source
-- Local audio cache (IndexedDB) to avoid redundant API calls
-- Smart detection of phrases/sentences with auto translation + TTS
-- Vocabulary filtering by type (word / phrase / sentence)
-
-## 📦 Installation
-
-### From Source
-
-1. Clone the repository
-
-```bash
-git clone https://github.com/Chaos7479/WordVoice.git
-```
-
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" (top right)
-4. Click "Load unpacked"
-5. Select the cloned `WordVoice` directory
-
-## ⚙️ Configuration
-
-### Zero Configuration Required
-
-Works out of the box with:
-- **Pronunciation**: Free Dictionary audio + Chrome built-in TTS
-- **Translation**: Google Translate (free)
-- **Dictionary**: Free Dictionary API (free)
-
-### Optional: Third-party TTS (Better Voice Quality)
-
-Right-click the extension icon → Options to configure:
-
-| Provider | Requires | Quality |
-|----------|----------|---------|
-| Free Dictionary | Nothing | ⭐⭐⭐ |
-| Chrome TTS | Nothing | ⭐⭐⭐ |
-| Alibaba DashScope | API Key | ⭐⭐⭐⭐⭐ |
-| Doubao (Volcengine) | App ID + Token | ⭐⭐⭐⭐⭐ |
-| MiniMax | Group ID + API Key | ⭐⭐⭐⭐⭐ |
-
-## 🎹 Keyboard Shortcuts
-
-| Shortcut | Condition | Action |
-|----------|-----------|--------|
-| `S` | Text selected + not in input | Pronounce & save |
-| `` ` `` | Text selected + not in input | Pronounce & save |
-| `Ctrl+Shift+S` | Any context | Pronounce & save |
-
-## 🏗️ Tech Stack
-
-- Chrome Extension Manifest V3
-- Vanilla JavaScript (no framework dependencies)
-- IndexedDB for local storage
-- Free Dictionary API
-- Google Translate API (free)
-- Multi-TTS provider adapters (DashScope / Doubao / MiniMax)
-- CSS glassmorphism + 3D flashcard animations
-
-## 📁 Project Structure
-
-```
-WordVoice/
-├── manifest.json            # Extension manifest
-├── background/
-│   └── service-worker.js    # Background service (routing, API calls)
-├── content/
-│   ├── content.js           # Content script (selection, toast, audio)
-│   └── content.css          # Toast styles
-├── lib/
-│   ├── tts.js               # TTS module (fallback chain, cache)
-│   ├── tts-providers.js     # TTS provider adapters
-│   ├── translate.js         # Translation (multi-provider + fallback)
-│   ├── settings.js          # Settings management
-│   ├── db.js                # IndexedDB wrapper
-│   ├── ai-sentences.js      # AI sentence generation
-│   └── utils.js             # Utility functions
-├── popup/                   # Popup panel (recent words, search)
-├── sidepanel/               # Side panel (vocabulary, review, stats)
-├── options/                 # Options page (TTS/translation/AI config)
-└── assets/icons/            # Extension icons
-```
-
-## 📄 License
-
-MIT License
+[MIT](LICENSE)
