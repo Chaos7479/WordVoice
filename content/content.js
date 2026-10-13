@@ -16,13 +16,14 @@
   let host,
     shadow,
     timer,
+    sizeObserver,
     current,
     lastTriggered = -Infinity,
     lastText = '';
   const style = `
     :host { color-scheme: light dark; }
     * { box-sizing: border-box; }
-    .card { --bg:#fff; --text:#252630; --secondary:#60616d; --line:#dededc; --accent:#4d52bd; --tint:#ededfa; --warn:#8b621c; width:min(360px,calc(100vw - 24px)); max-height:min(480px,calc(100vh - 24px)); overflow:auto; padding:18px; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:18px; box-shadow:0 12px 44px #20203524,0 2px 6px #2020350d; font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; text-align:left; -webkit-font-smoothing:antialiased; animation:enter .16s ease-out; }
+    .card { --bg:#fff; --text:#252630; --secondary:#60616d; --line:#dededc; --accent:#4d52bd; --tint:#ededfa; --warn:#8b621c; width:min(380px,calc(100vw - 24px)); max-height:min(640px,calc(100vh - 24px)); overflow:auto; overscroll-behavior:contain; padding:18px; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:18px; box-shadow:0 12px 44px #20203524,0 2px 6px #2020350d; font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; text-align:left; -webkit-font-smoothing:antialiased; animation:enter .16s ease-out; }
     .brand { display:flex; align-items:center; gap:7px; margin-bottom:12px; color:var(--secondary); font-size:10px; letter-spacing:.5px; }
     .brand svg { width:16px; height:16px; color:var(--accent); }
     .brand .close { margin-left:auto; }
@@ -33,6 +34,26 @@
     .translation { margin-top:12px; font-size:15px; }
     .status { padding-top:12px; margin-top:14px; border-top:1px solid var(--line); color:var(--secondary); font-size:11px; line-height:1.75; }
     .error { color:var(--warn); font-size:12px; }
+    .explanation-block { margin-top:16px; border-top:1px solid var(--line); padding-top:12px; }
+    .explanation-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; color:var(--secondary); font-size:11px; }
+    .model { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+    .explanation { line-height:1.75; font-size:14px; white-space:pre-wrap; }
+    .meaning-wait { margin-top:12px; color:var(--secondary); font-size:12px; }
+    .progress { height:3px; overflow:hidden; margin-top:8px; border-radius:4px; background:var(--tint); }
+    .progress::after { content:''; display:block; height:100%; width:38%; border-radius:inherit; background:var(--accent); animation:waiting 1.2s ease-in-out infinite; }
+    .explanation-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:12px; }
+    .explanation-actions button { min-height:32px; padding:6px 9px; }
+    .add-context { margin-left:auto; color:var(--secondary); border-color:transparent; }
+    .context-form { margin-top:12px; }
+    .context-form label { display:block; color:var(--secondary); font-size:11px; margin-bottom:6px; }
+    textarea { display:block; width:100%; min-height:70px; max-height:160px; resize:vertical; font:13px/1.6 -apple-system,BlinkMacSystemFont,sans-serif; padding:9px 10px; border:1px solid var(--line); border-radius:9px; background:var(--bg); color:var(--text); }
+    textarea::placeholder { color:var(--secondary); }
+    .context-footer { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:7px; font-size:10px; color:var(--secondary); }
+    .submit-context { color:var(--accent); background:var(--tint); border-color:transparent; }
+    .explanation-error { color:var(--warn); font-size:12px; }
+    .explanation-recovery { display:flex; align-items:center; gap:8px; margin-top:8px; }
+    button:disabled,textarea:disabled { opacity:.55; cursor:default; }
+    button:disabled:active { transform:none; }
     .buttons { display:flex; align-items:center; gap:8px; margin-top:14px; }
     .buttons .escape { margin-left:auto; font-size:10px; color:var(--secondary); }
     .speech-controls { display:flex; align-items:center; gap:8px; margin-top:12px; }
@@ -41,21 +62,34 @@
     .configure { flex-shrink:0; padding:6px 8px; }
     button { font:12px -apple-system,BlinkMacSystemFont,sans-serif; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:9px; min-height:32px; padding:7px 11px; cursor:pointer; }
     button:hover { background:var(--tint); } button:active { transform:scale(.97); }
-    button:focus-visible,select:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+    button:focus-visible,select:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
     .replay { color:var(--accent); background:var(--tint); border-color:transparent; }
     .close { border:0; min-height:26px; width:26px; padding:0; color:var(--secondary); font-size:19px; }
     [hidden] { display:none!important; }
     @keyframes enter { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    @keyframes waiting { from { transform:translateX(-100%); } to { transform:translateX(365%); } }
     @media(prefers-color-scheme:dark) { .card { --bg:#23242c; --text:#ececf2; --secondary:#b9bac8; --line:#3b3c49; --accent:#b2b5ff; --tint:#32334e; --warn:#e3c189; box-shadow:0 12px 44px #0006; } }
-    @media(prefers-reduced-motion:reduce) { .card { animation:none; } button:active { transform:none; } }
+    @media(prefers-reduced-motion:reduce) { .card,.progress::after { animation:none; } .progress::after { width:100%; opacity:.55; } button:active { transform:none; } }
     @media(prefers-contrast:more) { .card,button { border-color:var(--secondary); } }
   `;
   function scheduleDismiss() {
     clearTimeout(timer);
+    if (current?.explanation || current?.meaningPending || current?.refining || current?.noteOpen)
+      return;
     if (!host?.matches(':hover') && !shadow?.activeElement) timer = setTimeout(dismiss, 12000);
   }
   function dismiss() {
     clearTimeout(timer);
+    sizeObserver?.disconnect();
+    if (chrome.runtime?.id && current && !current.dismissed && current.requestId) {
+      try {
+        chrome.runtime
+          .sendMessage({ action: 'dismissSelection', requestId: current.requestId })
+          .catch(() => {});
+      } catch {
+        /* An extension update may invalidate this page's context during cleanup. */
+      }
+    }
     host?.remove();
     host = null;
     shadow = null;
@@ -89,10 +123,71 @@
         .filter(Boolean)
         .join('；'),
     );
+    renderExplanation();
     if (current.lookupDone && (current.speaking || current.speechError || current.stopped)) {
       scheduleDismiss();
     }
     position();
+  }
+  function renderExplanation() {
+    const busy = !!(current.meaningPending || current.refining);
+    const hasAnswer = !!current.explanation;
+    const block = shadow.querySelector('.explanation-block');
+    block.setAttribute('aria-busy', String(busy));
+    setLine('explanation', current.explanation || '');
+    setLine('model', current.model || '');
+    shadow.querySelector('.model').title = current.model
+      ? `自动选择 · ${current.model} · ${(current.elapsedMs / 1000).toFixed(1)} 秒`
+      : '';
+    shadow.querySelector('.meaning-wait').hidden = !busy;
+    setLine('waiting-label', current.refining ? '正在调整解释…' : '正在翻译并解释…');
+    shadow.querySelector('.explanation-actions').hidden = !hasAnswer;
+    for (const selector of ['.deeper', '.simpler', '.add-context', '.context-note'])
+      shadow.querySelector(selector).disabled = busy;
+    shadow.querySelector('.submit-context').disabled =
+      busy || !shadow.querySelector('.context-note').value.trim();
+    setLine('explanation-error', current.explanationError || '');
+    shadow.querySelector('.explanation-recovery').hidden = busy || !current.explanationError;
+  }
+  async function refine(direction = 'initial') {
+    const entry = current;
+    if (!entry || entry.dismissed || entry.meaningPending || entry.refining) return;
+    const note = shadow.querySelector('.context-note').value.trim();
+    entry.lastDirection = direction;
+    entry.refining = true;
+    entry.explanationError = '';
+    clearTimeout(timer);
+    render();
+    try {
+      const result = await chrome.runtime.sendMessage({
+        action: 'explainSelection',
+        requestId: entry.requestId,
+        word: entry.text,
+        sentence: entry.sentence,
+        direction,
+        note,
+        history: entry.history,
+      });
+      if (current !== entry || entry.dismissed) return;
+      if (!result?.success) throw new Error(result?.error || '解释失败，请重试');
+      entry.explanation = result.explanation;
+      entry.model = result.model;
+      entry.elapsedMs = result.elapsedMs;
+      if (result.translation) {
+        entry.translation = result.translation;
+        entry.lookupWarning = '';
+      }
+      entry.history = [
+        ...entry.history,
+        { direction, note, explanation: result.explanation },
+      ].slice(-6);
+    } catch (error) {
+      if (current !== entry || entry.dismissed) return;
+      entry.explanationError = error.message || '连接已中断，请刷新网页后重试';
+    } finally {
+      entry.refining = false;
+      if (current === entry && !entry.dismissed) render();
+    }
   }
   function renderSpeechOptions(options) {
     const select = shadow?.querySelector('.speech-provider');
@@ -135,6 +230,7 @@
     try {
       const result = await chrome.runtime.sendMessage({
         action: 'replaySelection',
+        requestId: entry.requestId,
         word: entry.text,
         ...(provider ? { provider } : {}),
       });
@@ -177,7 +273,30 @@
     host.style.cssText =
       'all: initial !important; position: fixed !important; z-index: 2147483647 !important; display: block !important;';
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${style}</style><div class="card" role="region" aria-label="WordVoice 选词结果"><div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4"/></svg>WordVoice<button class="close" aria-label="关闭">×</button></div><div class="head"><strong tabindex="0"></strong></div><div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p><p class="status">正在启动朗读…</p><p class="error" hidden></p></div><div class="speech-controls"><label for="speech-provider">发音</label><select id="speech-provider" class="speech-provider" aria-label="发音服务，切换后重读并记住选择" disabled><option>正在加载…</option></select><button class="configure" title="配置语音服务 Key 和音色">配置</button></div><div class="buttons"><button class="replay">再读一次</button><button class="stop">停止朗读</button><span class="escape">Esc 关闭</span></div></div>`;
+    shadow.innerHTML = `<style>${style}</style><div class="card" role="region" aria-label="WordVoice 选词结果">
+      <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4"/></svg>WordVoice<button class="close" aria-label="关闭">×</button></div>
+      <div class="head"><strong tabindex="0"></strong></div>
+      <div role="status" aria-live="polite"><p class="phonetic" hidden></p><p class="translation" hidden></p></div>
+      <section class="explanation-block" aria-label="AI 解释">
+        <div class="explanation-heading"><span>AI 解释</span><span class="model" hidden></span></div>
+        <p class="explanation" role="status" aria-live="polite" hidden></p>
+        <div class="meaning-wait"><span class="waiting-label">正在翻译并解释…</span><div class="progress" role="progressbar" aria-label="正在生成翻译与解释"></div></div>
+        <div class="explanation-actions" hidden>
+          <button class="deeper" title="补充原理和细节">＋ 太浅了</button><button class="simpler" title="用常用词和例子解释">－ 太深了</button>
+          <button class="add-context" aria-expanded="false" aria-controls="context-form">补充说明</button>
+        </div>
+        <form class="context-form" id="context-form" hidden>
+          <label for="context-note">附加说明（可选）</label>
+          <textarea class="context-note" id="context-note" maxlength="500" rows="2" placeholder="例如：用一个生活中的例子解释"></textarea>
+          <div class="context-footer"><span>Ctrl / ⌘ + Enter 发送</span><button class="submit-context" type="submit" disabled>重新解释</button></div>
+        </form>
+        <p class="explanation-error" role="status" hidden></p>
+        <div class="explanation-recovery" hidden><button class="retry-explanation">重试</button><button class="configure-ai">配置 AI</button></div>
+      </section>
+      <div role="status" aria-live="polite"><p class="status">正在启动朗读…</p><p class="error" hidden></p></div>
+      <div class="speech-controls"><label for="speech-provider">发音</label><select id="speech-provider" class="speech-provider" aria-label="发音服务，切换后重读并记住选择" disabled><option>正在加载…</option></select><button class="configure" title="配置语音服务 Key 和音色">配置</button></div>
+      <div class="buttons"><button class="replay">再读一次</button><button class="stop">停止朗读</button><span class="escape">Esc 关闭</span></div>
+    </div>`;
     shadow.querySelector('strong').textContent = text;
     shadow.querySelector('.close').onclick = dismiss;
     shadow.querySelector('.stop').onclick = () => {
@@ -190,6 +309,28 @@
     };
     shadow.querySelector('.replay').onclick = () => replay();
     shadow.querySelector('.speech-provider').onchange = (event) => replay(event.target.value);
+    shadow.querySelector('.deeper').onclick = () => refine('deeper');
+    shadow.querySelector('.simpler').onclick = () => refine('simpler');
+    shadow.querySelector('.retry-explanation').onclick = () =>
+      refine(current.lastDirection || 'initial');
+    shadow.querySelector('.add-context').onclick = () => {
+      current.noteOpen = !current.noteOpen;
+      shadow.querySelector('.context-form').hidden = !current.noteOpen;
+      shadow.querySelector('.add-context').setAttribute('aria-expanded', String(current.noteOpen));
+      if (current.noteOpen) shadow.querySelector('.context-note').focus();
+      position();
+    };
+    shadow.querySelector('.context-note').oninput = renderExplanation;
+    shadow.querySelector('.context-form').onsubmit = (event) => {
+      event.preventDefault();
+      if (shadow.querySelector('.context-note').value.trim()) refine('context');
+    };
+    shadow.querySelector('.context-note').onkeydown = (event) => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.isComposing) {
+        event.preventDefault();
+        shadow.querySelector('.context-form').requestSubmit();
+      }
+    };
     shadow.querySelector('.configure').onclick = async () => {
       try {
         const result = await chrome.runtime.sendMessage({ action: 'openSpeechSettings' });
@@ -198,6 +339,7 @@
         setLine('error', error.message);
       }
     };
+    shadow.querySelector('.configure-ai').onclick = shadow.querySelector('.configure').onclick;
     host.addEventListener('mouseenter', () => clearTimeout(timer));
     host.addEventListener('focusin', () => clearTimeout(timer));
     host.addEventListener('focusout', () => setTimeout(scheduleDismiss, 0));
@@ -205,12 +347,15 @@
       scheduleDismiss();
     });
     (document.body || document.documentElement).appendChild(host);
+    sizeObserver = new ResizeObserver(position);
+    sizeObserver.observe(shadow.querySelector('.card'));
   }
   function fail(text) {
     show('WordVoice', null);
     current = { dismissed: false, rect: null };
     shadow.querySelector('.speech-controls').hidden = true;
     shadow.querySelector('.buttons').hidden = true;
+    shadow.querySelector('.explanation-block').hidden = true;
     setLine('status', '');
     setLine('error', text);
     position();
@@ -232,7 +377,16 @@
     }
     const requestId = crypto.randomUUID();
     show(text, rect);
-    current = { requestId, playbackId: requestId, text, rect, sentence, dismissed: false };
+    current = {
+      requestId,
+      playbackId: requestId,
+      text,
+      rect,
+      sentence,
+      dismissed: false,
+      meaningPending: true,
+      history: [],
+    };
     render();
     try {
       const response = await chrome.runtime.sendMessage({
@@ -247,6 +401,7 @@
       if (!response?.success) {
         current.speechError = response?.error || '请求失败，请重试';
         current.lookupDone = true;
+        current.meaningPending = false;
         render();
       }
     } catch {
@@ -320,7 +475,6 @@
       }
       if (event.key === 'Escape' && host) {
         dismiss();
-        chrome.runtime.sendMessage({ action: 'stopSpeech' }).catch(() => {});
         return;
       }
       if (
@@ -379,6 +533,9 @@
     ) {
       if (message.speechRequestId && message.speechRequestId !== current.playbackId) return false;
       if (message.speechOptions) renderSpeechOptions(message.speechOptions);
+      if (message.explanation && !current.history.length) {
+        current.history.push({ direction: 'initial', note: '', explanation: message.explanation });
+      }
       Object.assign(current, message);
       render();
       respond({ success: true });

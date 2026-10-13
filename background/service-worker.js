@@ -15,9 +15,67 @@ import {
 } from '../lib/settings.js';
 import { generateSentences } from '../lib/ai-sentences.js';
 import { complete } from '../lib/llm.js';
+import { explainSelection } from '../lib/explanation.js';
 import { normalizeText, getTextType, textField, safeContextUrl } from '../lib/text.js';
 
 const pageMatches = chrome.runtime.getManifest().content_scripts.flatMap(({ matches }) => matches);
+const explanationJobs = new Map();
+let speechOwner;
+function setSpeechOwner(owner) {
+  speechOwner = owner;
+  // Speech can outlive a suspended service worker. Keep ownership across wakeups.
+  chrome.storage.session.set({ selectionSpeechOwner: owner }).catch(() => {});
+}
+const senderKey = (sender) => `${sender.tab?.id}:${sender.documentId || sender.frameId || 0}`;
+function beginExplanation(sender, requestId) {
+  const key = senderKey(sender);
+  explanationJobs.get(key)?.controller.abort();
+  const job = { controller: new AbortController(), requestId };
+  explanationJobs.set(key, job);
+  return job;
+}
+function endExplanation(sender, job) {
+  if (explanationJobs.get(senderKey(sender)) === job) explanationJobs.delete(senderKey(sender));
+}
+async function initialMeaning(message, sender, settings, job) {
+  const signal = job.controller.signal;
+  const update = async (value) => {
+    if (!signal.aborted) await sendUpdate(sender, message.requestId, value);
+  };
+  try {
+    const result = await explainSelection(
+      { ...message, direction: 'initial', history: [] },
+      settings,
+      { signal },
+    );
+    await update({ ...result, meaningPending: false, explanationError: '' });
+    return result.translation;
+  } catch (error) {
+    if (signal.aborted) return '';
+    await update({ explanationError: error.message });
+    let text = '';
+    let warning = '';
+    if (settings.showTranslation) {
+      try {
+        text = await translateDirect(
+          message.word,
+          'google',
+          {},
+          3000,
+          settings.sourceLanguage,
+          settings.targetLanguage,
+          signal,
+        );
+      } catch {
+        warning = '翻译暂不可用，请重试或检查网络';
+      }
+    }
+    await update({ translation: text, lookupWarning: warning, meaningPending: false });
+    return text;
+  } finally {
+    endExplanation(sender, job);
+  }
+}
 
 function notifyViews() {
   chrome.runtime.sendMessage({ action: 'dataChanged' }).catch(() => {});
@@ -34,6 +92,8 @@ function sendUpdate(sender, requestId, update) {
 async function handlePronounce(message, sender) {
   const word = normalizeText(message.word);
   const requestId = textField(message.requestId, 100);
+  const job = beginExplanation(sender, requestId);
+  setSpeechOwner({ key: senderKey(sender), requestId });
   const settingsPromise = getSettings();
   // Begin speech immediately. Dictionary, translation and storage never block browser speech.
   const speechPromise = tts
@@ -98,16 +158,7 @@ async function handlePronounce(message, sender) {
     });
     return data;
   });
-  const translation = (
-    settings.showTranslation
-      ? translateWithSettings(word, settings)
-          .then((text) => ({ text, warning: '' }))
-          .catch((error) => ({ text: '', warning: error.message }))
-      : Promise.resolve({ text: '', warning: '' })
-  ).then(async ({ text, warning }) => {
-    await sendUpdate(sender, requestId, { translation: text, lookupWarning: warning });
-    return text;
-  });
+  const translation = initialMeaning({ ...message, word, requestId }, sender, settings, job);
   const [wordData, translated] = await Promise.all([dictionary, translation]);
   await sendUpdate(sender, requestId, { lookupDone: true });
   const saved = await savePromise;
@@ -129,15 +180,47 @@ async function handlePronounce(message, sender) {
 
 const handlers = {
   pronounce: handlePronounce,
+  explainSelection: async (message, sender) => {
+    const requestId = textField(message.requestId, 100);
+    const job = beginExplanation(sender, requestId);
+    try {
+      return await explainSelection(message, await getSettings(), {
+        signal: job.controller.signal,
+      });
+    } finally {
+      endExplanation(sender, job);
+    }
+  },
+  dismissSelection: async (message, sender) => {
+    const key = senderKey(sender);
+    const job = explanationJobs.get(key);
+    if (job?.requestId === message.requestId) {
+      job.controller.abort();
+      explanationJobs.delete(key);
+    }
+    if (speechOwner === undefined) {
+      const saved = await chrome.storage.session.get('selectionSpeechOwner');
+      if (speechOwner === undefined) speechOwner = saved.selectionSpeechOwner || null;
+    }
+    if (speechOwner?.key === key && speechOwner.requestId === message.requestId) {
+      setSpeechOwner(null);
+      await tts.stopSpeech();
+    }
+    return {};
+  },
   ping: async () => ({}),
   stopSpeech: () => tts.stopSpeech().then(() => ({})),
-  playOnly: (message) => tts.speak(normalizeText(message.word)).then((speech) => ({ speech })),
+  playOnly: (message) => {
+    setSpeechOwner(null);
+    return tts.speak(normalizeText(message.word)).then((speech) => ({ speech }));
+  },
   getSpeechOptions: async () => ({ speechOptions: speechOptions(await getSettings()) }),
-  replaySelection: async (message) => {
+  replaySelection: async (message, sender) => {
     const word = normalizeText(message.word);
     const settings =
       message.provider === undefined ? getSettings() : chooseSpeechProvider(message.provider);
     // Claim the playback slot before waiting for preferences, so the newest request wins.
+    setSpeechOwner({ key: senderKey(sender), requestId: message.requestId });
     const speech = await tts.speak(word, settings);
     return { speech, speechOptions: speechOptions(await settings) };
   },
@@ -225,6 +308,7 @@ const handlers = {
     try {
       let result;
       if (type === 'tts') {
+        setSpeechOwner(null);
         settings.ttsProvider = provider;
         settings.providers[provider] = config;
         result = (
@@ -274,6 +358,8 @@ function validId(value) {
 }
 const contentActions = new Set([
   'pronounce',
+  'explainSelection',
+  'dismissSelection',
   'stopSpeech',
   'ping',
   'getSpeechOptions',

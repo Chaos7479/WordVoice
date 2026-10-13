@@ -1,6 +1,6 @@
 # WordVoice 2
 
-在 Chrome 网页中选中文本，按 **S** 朗读。发音、释义查询和保存同时进行。支持单词、短语、句子，以及本地单词本。
+在 Chrome 网页中选中文本，按 **S** 朗读。朗读和保存立即开始，浮层自动呈现翻译与 AI 解释。支持单词、短语、句子，以及本地单词本。
 
 ## 安装与更新
 
@@ -21,7 +21,7 @@
 
 | 操作                 | 效果                                                  |
 | -------------------- | ----------------------------------------------------- |
-| 选中文本后按 `S`     | 朗读、查询释义、记录到单词本                          |
+| 选中文本后按 `S`     | 朗读、翻译与 AI 解释、记录到单词本                    |
 | 选中文本后按反引号   | 同上                                                  |
 | `Ctrl+Shift+S`       | 浏览器快捷键，也支持输入框选区。macOS 使用 Control 键 |
 | 浮层切换发音服务     | 立即重读，并记住所选服务                              |
@@ -36,6 +36,20 @@
 
 单按 S 会保留输入框、编辑器和输入法的原有操作。密码字段保留原有输入行为。快捷键冲突时，在设置页打开 Chrome 快捷键管理并重新分配组合键。
 
+## 浮层中的翻译与解释
+
+配置任一文本服务 Key 后，选中文本按 **S**，浮层会一起显示翻译和中文解释。解释通常为简短定义，每条最多 **140 字**。等待期间显示循环进度条，完成或失败后结束等待。
+
+- **＋ 太浅了**：补充原理、条件或区别。
+- **－ 太深了**：使用常用词和具体例子。
+- **补充说明**：输入背景或疑问，再点击深浅按钮，或用「重新解释」及 Ctrl/⌘+Enter 发送。
+- 调整会携带原选区、邻近上下文、最近 6 轮解释和附加说明。等待及失败时保留上一条解释，失败后可重试。
+- 有解释时浮层持续显示。点击关闭、按 Esc、滚动原网页或离开页面，会关闭浮层、停止对应朗读，并取消 AI 请求。浮层内部滚动保留阅读状态。
+
+自动选择范围为已配置的通义千问、豆包方舟和 MiniMax 文本模型。首次并发请求，采用最先返回的有效结果，并取消其余请求；后续优先近期较快的模型，响应变慢时在 0.5–1.8 秒后启动备用模型，失败时立即切换。每 10 分钟重新比较速度。AI 请求总预算 10 秒。
+
+AI 暂不可用时，翻译另尝试 Google，最多等待 3 秒。浮层提示配置或重试入口；浏览器朗读和生词保存照常执行。设置中的翻译开关仍控制译文查询，词条详情继续使用所选翻译服务。
+
 ## 发音与服务配置
 
 默认使用 **浏览器语音**。优先选择对应语言和英语口音的本地语音，启动朗读时无需等待网络。macOS 美式英语优先使用 Samantha，自动选择时跳过 Albert 等特殊音色。设置页可选择「浏览器音色」并试听；提示框和最近发音记录会显示实际音色。音色失效时自动选择可用音色。语音可用性由操作系统和 Chrome 决定。释义、翻译失败时，已保存的文本仍保留在单词本中。
@@ -48,10 +62,10 @@
 | Free Dictionary           | 英文单词原音与词典释义 | 无需密钥。短语和句子使用浏览器语音          |
 | 阿里云百炼                | Qwen3-TTS HTTP 发音    | 中国内地 API Key、模型、音色                |
 | 豆包语音                  | 发音                   | App ID、Access Token、音色 ID               |
-| 火山方舟                  | 翻译与 AI 例句         | 独立的方舟 API Key、模型或推理接入点 ID     |
-| MiniMax                   | 发音、翻译和例句       | 中国内地 API Key、模型、音色；Group ID 可选 |
-| Google Translate 免费接口 | 默认翻译               | 需要可访问该服务的网络                      |
-| 通义千问                  | 翻译与例句             | 中国内地百炼 API Key、文本模型              |
+| 火山方舟                  | 翻译、解释与 AI 例句   | 独立的方舟 API Key、模型或推理接入点 ID     |
+| MiniMax                   | 发音、翻译、解释和例句 | 中国内地 API Key、模型、音色；Group ID 可选 |
+| Google Translate 免费接口 | 备用免费翻译           | 需要可访问该服务的网络                      |
+| 通义千问                  | 翻译、解释与例句       | 中国内地百炼 API Key、文本模型              |
 
 设置中的「试听」「测试翻译」「测试 AI 例句」使用当前表单值。**保存设置**后，网页使用新配置。浮层的「发音」菜单可以直接切换已配置的服务；切换会重读当前文本，并保存为后续朗读的默认服务。重复试听保留查询次数和上下文。未配置的服务会标注状态，可通过旁边的「配置」打开设置页；保存后浮层立即更新。
 
@@ -61,12 +75,12 @@
 
 ## 界面与键盘操作
 
-2.2 保留内容、操作、状态和必要说明，移除宣传语与装饰性英文标题。深浅两套外观随系统切换。单词本底部可切换单词本、复习和统计，右上角菜单提供导入与导出。
+2.3 保留内容、操作、状态和必要说明，移除宣传语与装饰性英文标题。深浅两套外观随系统切换。单词本底部可切换单词本、复习和统计，右上角菜单提供导入与导出。
 
 - 搜索：Ctrl/Cmd+F 定位搜索框，Esc 清空当前搜索。
 - 复习：空格查看释义，1/2/3 标记认识、模糊和不认识。
 - 设置：试听紧邻音色选择；固定保存栏提示未保存的更改。
-- 选词浮窗：鼠标停留或键盘操作期间保持显示，Esc 关闭。
+- 选词浮窗：解释和输入期间保持显示，Esc 关闭并停止朗读。
 
 页面与交互说明见 [docs/DESIGN.md](docs/DESIGN.md)。GitHub Actions 同时提供界面截图包。
 
@@ -75,7 +89,7 @@
 - 设置和密钥保存在当前 Chrome 配置文件的本地存储中。v1 的同步设置会一次性迁移到本地；升级保留已有设置。
 - 单词、翻译、查询次数、掌握度和网页上下文保存在 IndexedDB 中。
 - 只有用户发起选词查询时，扩展才记录该选区的文本、邻近上下文、网页标题和网址。本地 HTML 的来源路径也保存在本机单词本和导出备份中。
-- 查询词典会发送所选单词。启用翻译会把所选文本发送给所选服务；失败时依次尝试已配置的通义千问、豆包或 MiniMax，再尝试 Google 免费接口，每家最多一次，总等待时间最多 12 秒。通义千问可共用百炼语音 Key。云端发音和 AI 例句也需要发送对应文本；本地文件路径只用于本机来源记录。
+- 查询词典会发送所选单词。选词后的 AI 请求包含选区及邻近上下文；调整解释时还包含最近的解释和附加说明。自动择快可能并发调用多家已配置服务。模型测速只在浏览器会话中保存模型名称、耗时和时间，不保存请求内容或 Key。通义千问可共用百炼语音 Key。云端发音、翻译和 AI 例句发送对应文本；本地文件路径只用于本机来源记录。
 - 浏览器语音优先使用本地语音；缺少本地语音时，Chrome 可能选择联网语音。
 - JSON 导出只包含学习记录，不包含密钥。
 - 扩展使用 HTTP/HTTPS 网站权限监听选区，本地 `file://` 网页由 Chrome 的「允许访问文件网址」开关单独控制。安装或更新后会接入已授权且打开的页面。`scripting` 用于接入和修复内容脚本；`offscreen` 用于在扩展页面播放音频；`tts` 用于系统语音；`storage` 用于设置；`sidePanel` 用于单词本。
@@ -116,7 +130,7 @@ npm run package
 
 ## English
 
-Select text on a regular Chrome page and press **S** to pronounce it, look it up and save it. WordVoice 2 starts browser speech independently of dictionary and translation requests. New selections interrupt old speech. Cloud audio plays in an extension offscreen document and falls back to browser speech after a bounded timeout.
+Select text on a regular Chrome page and press **S** to pronounce it, look it up and save it. WordVoice 2 starts browser speech immediately and shows translation plus a short AI explanation in the selection card. Deeper/simpler controls include recent explanations and optional context. Configured text models are selected automatically by response speed. New selections interrupt old speech; closing the card stops its speech and pending AI work. Cloud audio plays in an extension offscreen document and falls back to browser speech after a bounded timeout.
 
 Load the repository directory containing `manifest.json` through Chrome's **Load unpacked** button. Requires Chrome 116+. No build is required. For upgrades, export a backup first and replace files in the original extension directory to preserve its ID and data.
 

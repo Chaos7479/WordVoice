@@ -16,6 +16,11 @@ async function prepareWorker(target = worker) {
     globalThis.__delay = 0;
     globalThis.__offline = false;
     globalThis.__cloudAudio = '';
+    globalThis.__meaningRequests = [];
+    globalThis.__meaningDelay = 0;
+    globalThis.__meaningFailure = false;
+    globalThis.__meaningAborted = 0;
+    globalThis.__stops = 0;
     chrome.tts.getVoices = (callback) =>
       callback([
         { voiceName: 'Albert', lang: 'en-US', remote: false, eventTypes: ['start', 'end'] },
@@ -35,6 +40,7 @@ async function prepareWorker(target = worker) {
       ]);
     let eventCallback;
     chrome.tts.stop = () => {
+      globalThis.__stops++;
       eventCallback?.({ type: 'interrupted' });
       eventCallback = null;
     };
@@ -97,6 +103,49 @@ async function prepareWorker(target = worker) {
               }),
             )
           : new Response('', { status: 503 });
+      if (url.includes('chat/completions') && options.body?.includes('你是阅读助手')) {
+        const body = JSON.parse(options.body);
+        const input = JSON.parse(body.messages[1].content);
+        globalThis.__meaningRequests.push({ url, input, system: body.messages[0].content });
+        const delay =
+          typeof __meaningDelay === 'object'
+            ? __meaningDelay[input.selectedText] || 0
+            : __meaningDelay;
+        if (delay)
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, delay);
+            options.signal.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                globalThis.__meaningAborted++;
+                reject(options.signal.reason);
+              },
+              { once: true },
+            );
+          });
+        if (__meaningFailure) return new Response('', { status: 503 });
+        const explanations = {
+          initial: `${input.selectedText} 是用于打招呼的表达。见面或开始交谈时使用，语气通常友好。`,
+          deeper: '它属于开启对话的寒暄语，作用是确认双方开始交流。语调和场景会影响它的礼貌程度。',
+          simpler: '就像见到朋友时说“你好”，用它告诉对方：我在和你打招呼。',
+          context: '按你的例子理解：就像打开一扇门，这个词用来开始一段交流。',
+        };
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    translation: input.selectedText === 'World' ? '世界' : '你好',
+                    explanation: explanations[input.direction],
+                  }),
+                },
+              },
+            ],
+          }),
+        );
+      }
       if (url.includes('chat/completions') || url.includes('chatcompletion_v2'))
         return new Response(
           JSON.stringify({
@@ -230,6 +279,168 @@ test.afterAll(async () => {
   if (extensionRoot) await rm(extensionRoot, { recursive: true, force: true });
 });
 
+test('selection returns translation and explanation together, with progress and contextual refinements', async () => {
+  await setSettings({ providers: { dashscope: { apiKey: 'explanation-test-key' } } });
+  await worker.evaluate(() => {
+    globalThis.__meaningDelay = 700;
+  });
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.getByRole('progressbar')).toBeVisible();
+  await expect(popup.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+  await expect(popup.locator('.status')).toContainText('Samantha');
+  await expect(popup.locator('.translation')).toHaveText('你好');
+  await expect(popup.locator('.explanation')).toContainText('Hello');
+  await expect(popup.getByRole('progressbar')).toBeHidden();
+  const first = await popup.locator('.explanation').innerText();
+  await popup.locator('.add-context').click();
+  await popup.locator('.context-note').fill('用生活中的例子解释');
+  await page.keyboard.type('s');
+  expect((await savedWords())[0].frequency).toBe(1);
+  await popup.locator('.deeper').click();
+  await expect(popup.locator('.simpler')).toBeDisabled();
+  await expect(popup.locator('.explanation')).toHaveText(first);
+  await expect(popup.locator('.explanation')).toContainText('寒暄语');
+  const requests = await worker.evaluate(() => __meaningRequests);
+  expect(requests[1].input.direction).toBe('deeper');
+  expect(requests[1].input.note).toBe('用生活中的例子解释s');
+  expect(requests[1].input.previousExplanations.at(-1).explanation).toBe(first);
+  await popup.locator('.simpler').click();
+  await expect(popup.locator('.explanation')).toContainText('就像见到朋友');
+  await popup.locator('.context-note').fill('用开门作比喻');
+  await popup.locator('.context-note').press('Control+Enter');
+  await expect(popup.locator('.explanation')).toContainText('打开一扇门');
+  expect([...(await popup.locator('.explanation').innerText())].length).toBeLessThanOrEqual(140);
+  expect(
+    await worker.evaluate(() => __meaningRequests.at(-1).input.previousExplanations.length),
+  ).toBe(3);
+  expect((await savedWords())[0].frequency).toBe(1);
+  expect(await worker.evaluate(() => __calls.length)).toBe(1);
+  expect(await popup.textContent()).not.toContain('explanation-test-key');
+});
+
+test('failed refinements preserve the previous explanation and note, then retry successfully', async () => {
+  await setSettings({ providers: { dashscope: { apiKey: 'test-key' } } });
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('.explanation')).toBeVisible();
+  const previous = await popup.locator('.explanation').innerText();
+  await popup.locator('.add-context').click();
+  await popup.locator('.context-note').fill('给一个例子');
+  await worker.evaluate(() => {
+    globalThis.__meaningFailure = true;
+  });
+  await popup.locator('.simpler').click();
+  await expect(popup.locator('.explanation-error')).toContainText('暂不可用');
+  await expect(popup.locator('.explanation')).toHaveText(previous);
+  await expect(popup.locator('.context-note')).toHaveValue('给一个例子');
+  await expect(popup.getByRole('progressbar')).toBeHidden();
+  await worker.evaluate(() => {
+    globalThis.__meaningFailure = false;
+  });
+  await popup.locator('.retry-explanation').click();
+  await expect(popup.locator('.explanation')).toContainText('就像见到朋友');
+  await expect(popup.locator('.explanation-error')).toBeHidden();
+  expect(await worker.evaluate(() => __meaningRequests.at(-1).input.direction)).toBe('simpler');
+});
+
+test('missing AI setup keeps translation usable and can recover from the same popup', async () => {
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('.translation')).toHaveText('你好。欢迎。');
+  await expect(popup.locator('.explanation-error')).toContainText('配置 AI');
+  await expect(popup.getByRole('progressbar')).toBeHidden();
+  const opened = context.waitForEvent('page');
+  await popup.locator('.configure-ai').click();
+  const settingsPage = await opened;
+  await expect(settingsPage).toHaveURL(/options.html#services/);
+  await setSettings({ providers: { dashscope: { apiKey: 'test-key' } } });
+  await page.bringToFront();
+  await popup.locator('.retry-explanation').click();
+  await expect(popup.locator('.translation')).toHaveText('你好');
+  await expect(popup.locator('.explanation')).toContainText('Hello');
+  await expect(popup.locator('.explanation-error')).toBeHidden();
+  expect((await savedWords())[0].frequency).toBe(1);
+});
+
+test('new selections cancel old AI work; closing by button, Escape or page scroll stops speech', async () => {
+  await setSettings({ providers: { dashscope: { apiKey: 'test-key' } } });
+  await worker.evaluate(() => {
+    globalThis.__meaningDelay = { Hello: 5000, World: 10 };
+  });
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  await expect.poll(() => worker.evaluate(() => __meaningRequests.length)).toBe(1);
+  await select(page, '#second');
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('.translation')).toHaveText('世界');
+  await expect(popup.locator('.explanation')).toContainText('World');
+  await expect.poll(() => worker.evaluate(() => __meaningAborted)).toBe(1);
+  await popup.locator('.close').click();
+  for (const close of ['button', 'escape', 'scroll']) {
+    await select(page);
+    await page.keyboard.press('s');
+    await expect(popup.locator('.status')).toContainText('Samantha');
+    await expect(popup.getByRole('progressbar')).toBeVisible();
+    const stops = await worker.evaluate(() => __stops);
+    const aborted = await worker.evaluate(() => __meaningAborted);
+    if (close === 'button') await popup.locator('.close').click();
+    if (close === 'escape') await page.keyboard.press('Escape');
+    if (close === 'scroll') await page.evaluate(() => window.dispatchEvent(new Event('scroll')));
+    await expect(popup).toHaveCount(0);
+    await expect.poll(() => worker.evaluate(() => __stops)).toBeGreaterThan(stops);
+    await expect.poll(() => worker.evaluate(() => __meaningAborted)).toBeGreaterThan(aborted);
+    await page.waitForTimeout(200);
+  }
+});
+
+for (const colorScheme of ['light', 'dark']) {
+  test(`AI explanation card fits narrow screens and is accessible in ${colorScheme}`, async () => {
+    await setSettings({ providers: { dashscope: { apiKey: 'test-key' } } });
+    const page = await readingPage();
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: 420, height: 760 });
+    await page.clock.install();
+    await select(page);
+    await page.keyboard.press('s');
+    const popup = page.locator('wordvoice-popup');
+    await expect(popup.locator('.explanation')).toBeVisible();
+    await page.clock.fastForward(15000);
+    await expect(popup).toBeVisible();
+    await popup.screenshot({ path: `test-results/design-explanation-${colorScheme}.png` });
+    await popup.locator('.add-context').click();
+    await popup.locator('.context-note').fill('我第一次接触这个词，请举个例子');
+    await page.setViewportSize({ width: 320, height: 600 });
+    await expect
+      .poll(async () => {
+        const box = await popup.boundingBox();
+        return box.y + box.height;
+      })
+      .toBeLessThanOrEqual(589);
+    const box = await popup.boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(11);
+    expect(box.x + box.width).toBeLessThanOrEqual(309);
+    expect(box.y + box.height).toBeLessThanOrEqual(589);
+    expect(await popup.locator('.card').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+      true,
+    );
+    const result = await new AxeBuilder({ page })
+      .include('wordvoice-popup')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(result.violations).toEqual([]);
+    await popup.screenshot({ path: `test-results/design-explanation-narrow-${colorScheme}.png` });
+  });
+}
+
 test('local HTML supports S, saving its source, and live speech settings', async () => {
   expect(await harness.evaluate(() => chrome.extension.isAllowedFileSchemeAccess())).toBe(true);
   const file = path.join(profile, 'local reading.html');
@@ -271,7 +482,20 @@ test('blocked Google translation falls back to the speech DashScope key before d
         globalThis.__qwenCalls++;
         if (options.headers.Authorization !== 'Bearer shared-dashscope-test-key')
           return new Response('', { status: 401 });
-        return new Response(JSON.stringify({ choices: [{ message: { content: '你好' } }] }));
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    translation: '你好',
+                    explanation: '见面时使用的问候语，常用于开始一段交流。',
+                  }),
+                },
+              },
+            ],
+          }),
+        );
       }
       return original(input, options);
     };
@@ -1210,5 +1434,31 @@ test('S wakes a stopped service worker and retains data and settings', async () 
       'ms',
     );
   }
+  // The popup remains open across another worker suspension. Closing it must
+  // recover playback ownership from session storage and still stop synthesis.
+  await expect
+    .poll(() =>
+      harness.evaluate(
+        async () =>
+          (await chrome.storage.session.get('selectionSpeechOwner')).selectionSpeechOwner
+            ?.requestId,
+      ),
+    )
+    .toBeTruthy();
+  await cdp.send('ServiceWorker.stopWorker', { versionId });
+  await expect
+    .poll(() => versions.find((v) => v.versionId === versionId)?.runningStatus)
+    .toBe('stopped');
+  await page.locator('wordvoice-popup .close').click();
+  await expect
+    .poll(() =>
+      harness.evaluate(
+        async () => (await chrome.storage.session.get('selectionSpeechOwner')).selectionSpeechOwner,
+      ),
+    )
+    .toBeNull();
+  await expect
+    .poll(() => harness.evaluate(() => new Promise((resolve) => chrome.tts.isSpeaking(resolve))))
+    .toBe(false);
   await cdp.detach();
 });

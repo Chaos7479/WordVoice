@@ -24,8 +24,8 @@ const fields = {
     ],
   },
   qwen: {
-    title: '通义千问 · 翻译和例句',
-    hint: '翻译和 AI 例句共用此配置。Key 留空时使用百炼语音的 Key。',
+    title: '通义千问 · 翻译、解释和例句',
+    hint: '翻译、浮层解释和 AI 例句共用此配置。Key 留空时使用百炼语音的 Key。',
     fields: [
       ['apiKey', 'API Key', 'password'],
       ['textModel', '文本模型名称', 'text'],
@@ -33,17 +33,17 @@ const fields = {
   },
   doubao: {
     title: '豆包 · 语音与方舟文本',
-    hint: '语音服务使用 App ID 和 Access Token。翻译和例句使用方舟 API Key 与已开通的模型 ID。',
+    hint: '语音服务使用 App ID 和 Access Token。翻译、解释和例句使用方舟 API Key 与已开通的模型 ID。',
     fields: [
       ['appId', '语音 App ID', 'text'],
       ['accessToken', '语音 Access Token', 'password'],
       ['voiceType', '语音音色 ID', 'text'],
-      ['apiKey', '方舟 API Key（翻译和例句）', 'password'],
+      ['apiKey', '方舟 API Key（翻译、解释和例句）', 'password'],
       ['textModel', '方舟模型名称或推理接入点 ID', 'text'],
     ],
   },
   minimax: {
-    title: 'MiniMax · 语音、翻译和例句',
+    title: 'MiniMax · 语音、翻译、解释和例句',
     hint: '使用中国内地平台凭据。Group ID 按账户配置填写。',
     fields: [
       ['apiKey', 'API Key', 'password'],
