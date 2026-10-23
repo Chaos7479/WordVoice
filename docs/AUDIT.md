@@ -1,5 +1,15 @@
 # WordVoice 2 审计与验证记录
 
+## 2.3.2 AI 服务错误诊断与恢复
+
+- 2026-10-23 本机复现：qwen-turbo 返回 HTTP 429 / limit_requests；MiniMax 原兼容接口返回 HTTP 404，原生接口确认 MiniMax-M2.5 返回业务码 2069（模型已停用）。原路由丢弃各服务原因，统一显示服务错误。
+- 更新默认文本模型为 qwen-flash 和 MiniMax-M3.1-Flash，并迁移旧默认值。保留其他自定义模型、Key、语音模型和音色。MiniMax 改用已实测的原生 `/v1/text/chatcompletion_v2` 接口，解释使用 low 思考深度。
+- 识别 HTTP 错误和 HTTP 200 中的业务失败。将限流、权限、余额、模型停用、输出截断及格式错误转换为固定提示。浮层保留每个服务的失败原因；服务返回的原始消息与凭据不进入页面或会话测速记录。
+- 限流服务默认避让 60 秒，优先使用其他模型。遵循 Retry-After 秒数或日期，限制在 1 秒至 10 分钟。截止时间保留先前失败原因，并取消剩余请求。
+- 真实链路验证：database 的初次翻译与解释由 qwen-flash 完成，耗时 1076 ms；深入解释 1448 ms，简化解释 1015 ms；解释分别为 83、121、107 字。单独使用 MiniMax-M3.1-Flash 解释 application 成功，耗时 1146 ms，43 字。耗时仅代表本次网络和服务状态。
+- 验证通过：49 项单元测试、37 项完整浏览器回归、静态与格式检查。覆盖旧模型迁移、HTTP 200 业务失败、限流冷却与恢复、各服务错误展示、同浮层重试及既有交互。
+- 官方依据：[百炼限流说明](https://help.aliyun.com/zh/model-studio/error-code)、[qwen-flash](https://help.aliyun.com/zh/model-studio/qwen-flash)、[MiniMax 模型参数](https://platform.minimax.cn/docs/api-reference/text-openai-api)、[MiniMax 错误码](https://platform.minimax.io/docs/api-reference/errorcode)。
+
 ## 2.3.1 附加说明发送后收起
 
 - 点击「重新解释」、快捷键发送或用深浅按钮提交说明后，输入框立即收起并清空，焦点回到解释。

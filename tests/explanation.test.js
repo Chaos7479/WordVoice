@@ -66,7 +66,7 @@ test('cold selection races configured models, returns the fastest answer and abo
 });
 
 test('a recent fast model runs alone; failure immediately tries another model', async () => {
-  session.textModelSpeeds = { 'qwen:qwen-turbo': { ms: 40, time: Date.now() } };
+  session.textModelSpeeds = { 'qwen:qwen-flash': { ms: 40, time: Date.now() } };
   const original = fetch;
   const calls = [];
   let fail = false;
@@ -91,8 +91,8 @@ test('a recent fast model runs alone; failure immediately tries another model', 
 
 test('periodic comparison discovers a faster model despite a recently used winner', async () => {
   session.textModelSpeeds = {
-    'qwen:qwen-turbo': { ms: 10, time: Date.now(), racedAt: Date.now() - 660000 },
-    'minimax:MiniMax-M2.5': { ms: 100, time: Date.now(), racedAt: Date.now() - 660000 },
+    'qwen:qwen-flash': { ms: 10, time: Date.now(), racedAt: Date.now() - 660000 },
+    'minimax:MiniMax-M3.1-Flash': { ms: 100, time: Date.now(), racedAt: Date.now() - 660000 },
   };
   const original = fetch;
   const calls = [];
@@ -109,7 +109,7 @@ test('periodic comparison discovers a faster model despite a recently used winne
 });
 
 test('a slow recent winner starts a hedge and can be replaced before its timeout', async () => {
-  session.textModelSpeeds = { 'qwen:qwen-turbo': { ms: 40, time: Date.now() } };
+  session.textModelSpeeds = { 'qwen:qwen-flash': { ms: 40, time: Date.now() } };
   const original = fetch;
   let aborted = false;
   globalThis.fetch = (url, options) =>
@@ -218,6 +218,91 @@ test('missing keys and failed services produce actionable errors without credent
       assert.doesNotMatch(error.message, /private-test-key/);
       return true;
     });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('rate limits and retired models retain individual causes; cooldown skips requests until expiry', async () => {
+  const original = fetch;
+  const calls = [];
+  let recovered = false;
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    if (url.includes('dashscope'))
+      return recovered
+        ? response(answer)
+        : new Response(
+            JSON.stringify({
+              error: {
+                code: 'limit_requests',
+                message: 'qwen-private-test-key',
+              },
+            }),
+            { status: 429, headers: { 'Retry-After': '90' } },
+          );
+    return new Response(
+      JSON.stringify({ base_resp: { status_code: 2069, status_msg: 'minimax-private-test-key' } }),
+    );
+  };
+  const check = (error) => {
+    assert.match(error.message, /通义千问：请求限流/);
+    assert.match(error.message, /MiniMax：模型已停用/);
+    assert.doesNotMatch(error.message, /private-test-key/);
+    return true;
+  };
+  try {
+    await assert.rejects(explainSelection({ word: 'database' }, settings()), check);
+    assert.equal(calls.length, 2);
+    await assert.rejects(explainSelection({ word: 'database' }, settings()), check);
+    assert.equal(calls.length, 3);
+    assert.match(calls.at(-1), /chatcompletion_v2/);
+    assert.ok(session.textModelSpeeds['qwen:qwen-flash'].retryAt > Date.now() + 85000);
+    assert.doesNotMatch(JSON.stringify(session), /private-test-key|database/);
+    session.textModelSpeeds['qwen:qwen-flash'].retryAt = Date.now() - 1;
+    recovered = true;
+    assert.equal((await explainSelection({ word: 'database' }, settings())).provider, 'qwen');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('a single rate-limited model fails promptly during cooldown without resending', async () => {
+  const original = fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response('', { status: 429 });
+  };
+  const onlyQwen = normalizeSettings({ providers: { qwen: { apiKey: 'test-key' } } });
+  try {
+    for (let i = 0; i < 2; i++)
+      await assert.rejects(explainSelection({ word: 'hello' }, onlyQwen), /限流/);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('deadline preserves an earlier service failure alongside the pending model timeout', async () => {
+  const original = fetch;
+  let aborted = false;
+  globalThis.fetch = (url, options) =>
+    url.includes('dashscope')
+      ? Promise.resolve(new Response('', { status: 429 }))
+      : delayed(5000, options.signal, answer, () => {
+          aborted = true;
+        });
+  try {
+    await assert.rejects(
+      explainSelection({ word: 'hello' }, settings(), { timeoutMs: 40 }),
+      (error) => {
+        assert.match(error.message, /通义千问：.*429/);
+        assert.match(error.message, /MiniMax：.*超时/);
+        return true;
+      },
+    );
+    assert.equal(aborted, true);
   } finally {
     globalThis.fetch = original;
   }

@@ -103,10 +103,18 @@ async function prepareWorker(target = worker) {
               }),
             )
           : new Response('', { status: 503 });
-      if (url.includes('chat/completions') && options.body?.includes('你是阅读助手')) {
+      if (
+        (url.includes('chat/completions') || url.includes('chatcompletion_v2')) &&
+        options.body?.includes('你是阅读助手')
+      ) {
         const body = JSON.parse(options.body);
         const input = JSON.parse(body.messages[1].content);
-        globalThis.__meaningRequests.push({ url, input, system: body.messages[0].content });
+        globalThis.__meaningRequests.push({
+          url,
+          input,
+          model: body.model,
+          system: body.messages[0].content,
+        });
         const delay =
           typeof __meaningDelay === 'object'
             ? __meaningDelay[input.selectedText] || 0
@@ -124,6 +132,17 @@ async function prepareWorker(target = worker) {
               { once: true },
             );
           });
+        if (__meaningFailure === 'provider-errors')
+          return url.includes('dashscope')
+            ? new Response(
+                JSON.stringify({ error: { code: 'limit_requests', message: 'private-test-key' } }),
+                { status: 429 },
+              )
+            : new Response(
+                JSON.stringify({
+                  base_resp: { status_code: 2069, status_msg: 'private-test-key' },
+                }),
+              );
         if (__meaningFailure) return new Response('', { status: 503 });
         const explanations = {
           initial: `${input.selectedText} 是用于打招呼的表达。见面或开始交谈时使用，语气通常友好。`,
@@ -388,6 +407,43 @@ test('missing AI setup keeps translation usable and can recover from the same po
   await expect(popup.locator('.translation')).toHaveText('你好');
   await expect(popup.locator('.explanation')).toContainText('Hello');
   await expect(popup.locator('.explanation-error')).toBeHidden();
+  expect((await savedWords())[0].frequency).toBe(1);
+});
+
+test('provider errors identify rate limits and retired models; native MiniMax recovers from the popup', async () => {
+  await setSettings({
+    providers: {
+      qwen: { apiKey: 'private-test-key', textModel: 'qwen-turbo' },
+      minimax: { apiKey: 'private-test-key', textModel: 'MiniMax-M2.5' },
+    },
+  });
+  await worker.evaluate(() => {
+    globalThis.__meaningFailure = 'provider-errors';
+  });
+  const page = await readingPage();
+  await select(page);
+  await page.keyboard.press('s');
+  const popup = page.locator('wordvoice-popup');
+  await expect(popup.locator('.explanation-error')).toContainText('通义千问：请求限流');
+  await expect(popup.locator('.explanation-error')).toContainText('MiniMax：模型已停用');
+  await expect(popup.locator('.translation')).toHaveText('你好。欢迎。');
+  await expect(popup.getByRole('progressbar')).toBeHidden();
+  await expect(popup.locator('.status')).toContainText('Samantha');
+  const requests = await worker.evaluate(() => __meaningRequests);
+  expect(requests.map((r) => r.model).sort()).toEqual(['MiniMax-M3.1-Flash', 'qwen-flash']);
+  expect(requests.find((r) => r.model.startsWith('MiniMax')).url).toBe(
+    'https://api.minimax.cn/v1/text/chatcompletion_v2',
+  );
+  expect(await popup.textContent()).not.toContain('private-test-key');
+  await worker.evaluate(() => {
+    globalThis.__meaningFailure = false;
+  });
+  await popup.locator('.retry-explanation').click();
+  await expect(popup.locator('.explanation')).toContainText('Hello');
+  await expect(popup.locator('.translation')).toHaveText('你好');
+  await expect(popup.locator('.explanation-error')).toBeHidden();
+  expect(await worker.evaluate(() => __meaningRequests.length)).toBe(3);
+  expect(await worker.evaluate(() => __meaningRequests.at(-1).model)).toBe('MiniMax-M3.1-Flash');
   expect((await savedWords())[0].frequency).toBe(1);
 });
 
