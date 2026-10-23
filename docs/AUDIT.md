@@ -8,6 +8,7 @@
 - 限流服务默认避让 60 秒，优先使用其他模型。遵循 Retry-After 秒数或日期，限制在 1 秒至 10 分钟。截止时间保留先前失败原因，并取消剩余请求。
 - 真实链路验证：database 的初次翻译与解释由 qwen-flash 完成，耗时 1076 ms；深入解释 1448 ms，简化解释 1015 ms；解释分别为 83、121、107 字。单独使用 MiniMax-M3.1-Flash 解释 application 成功，耗时 1146 ms，43 字。耗时仅代表本次网络和服务状态。
 - 验证通过：49 项单元测试、37 项完整浏览器回归、静态与格式检查。覆盖旧模型迁移、HTTP 200 业务失败、限流冷却与恢复、各服务错误展示、同浮层重试及既有交互。
+- CI 固定使用 Ubuntu 24.04，避免 ubuntu-latest 升级到 26.04 后与当前 Playwright 1.58.2 的浏览器依赖安装器不兼容。
 - 官方依据：[百炼限流说明](https://help.aliyun.com/zh/model-studio/error-code)、[qwen-flash](https://help.aliyun.com/zh/model-studio/qwen-flash)、[MiniMax 模型参数](https://platform.minimax.cn/docs/api-reference/text-openai-api)、[MiniMax 错误码](https://platform.minimax.io/docs/api-reference/errorcode)。
 
 ## 2.3.1 附加说明发送后收起
